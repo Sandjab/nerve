@@ -10,8 +10,12 @@ from nerve.embeddings import embed
 from nerve.entities import EntityResolver
 from nerve.dedup import FactDeduper
 
-async def run_extraction(cfg: Config, store: Store, doc_id: int, text: str,
-                        *, client=None) -> AsyncGenerator[dict, None]:
+async def run_extraction(cfg: Config, store: Store, doc_id: int,
+                        segments: list[tuple[str, str]], *, client=None
+                        ) -> AsyncGenerator[dict, None]:
+    """segments = liste de (text, source_file). Un seul segment pour text/url ;
+    N pour un zip. resolver/deduper partagés -> dedup et fusion d'entités
+    traversent tous les fichiers (résolution intra-document)."""
     owns_client = client is None
     client = client or httpx.AsyncClient(timeout=None)
 
@@ -21,28 +25,30 @@ async def run_extraction(cfg: Config, store: Store, doc_id: int, text: str,
     resolver = EntityResolver(store, doc_id, embed_one, cfg.entity_threshold)
     deduper = FactDeduper(embed_one, cfg.dedup_threshold, field=cfg.dedup_field)
     try:
-        for ci, chunk in enumerate(chunk_text(text)):
-            parser = FactStreamParser()
-            msgs = build_messages(chunk)
-            async for delta in stream_chat(
-                cfg.llm, msgs, client=client,
-                response_format=FACT_RESPONSE_FORMAT, temperature=0.7,
-            ):
-                for fact in parser.feed(delta):
-                    if not fact.get("subject") or not fact.get("object"):
-                        continue
-                    sid = await resolver.resolve(fact["subject"])
-                    oid = await resolver.resolve(fact["object"])
-                    is_dup, dup_of, vec = await deduper.check(fact)
-                    fid = store.add_fact(
-                        doc_id, fact, is_duplicate=is_dup, dup_of_id=dup_of,
-                        subject_entity_id=sid, object_entity_id=oid)
-                    if not is_dup:
-                        deduper.add(fid, vec)
-                        store.add_fact_vector(fid, vec)
-                    yield {"type": "fact", "fact": {**fact, "id": fid},
-                           "is_duplicate": is_dup}
-            yield {"type": "round_end", "chunk": ci}
+        for text, source_file in segments:
+            for ci, chunk in enumerate(chunk_text(text)):
+                parser = FactStreamParser()
+                msgs = build_messages(chunk)
+                async for delta in stream_chat(
+                    cfg.llm, msgs, client=client,
+                    response_format=FACT_RESPONSE_FORMAT, temperature=0.7,
+                ):
+                    for fact in parser.feed(delta):
+                        if not fact.get("subject") or not fact.get("object"):
+                            continue
+                        sid = await resolver.resolve(fact["subject"])
+                        oid = await resolver.resolve(fact["object"])
+                        is_dup, dup_of, vec = await deduper.check(fact)
+                        fid = store.add_fact(
+                            doc_id, fact, is_duplicate=is_dup, dup_of_id=dup_of,
+                            subject_entity_id=sid, object_entity_id=oid,
+                            source_file=source_file)
+                        if not is_dup:
+                            deduper.add(fid, vec)
+                            store.add_fact_vector(fid, vec)
+                        yield {"type": "fact", "fact": {**fact, "id": fid},
+                               "is_duplicate": is_dup, "source_file": source_file}
+                yield {"type": "round_end", "chunk": ci, "source_file": source_file}
         store.finish_document(doc_id)
         doc = store.get_document(doc_id)
         yield {"type": "done", "total_facts": doc["total_facts"],

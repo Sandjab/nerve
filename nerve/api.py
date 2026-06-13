@@ -23,7 +23,7 @@ class CreateDoc(BaseModel):
 async def create_document(body: CreateDoc):
     set_id = body.set_id or store.create_set(body.set_name)
     doc_id = store.create_document(set_id, body.title, "text")
-    async for _ in run_extraction(cfg, store, doc_id, body.text):
+    async for _ in run_extraction(cfg, store, doc_id, [(body.text, "")]):
         pass  # Plan 1 : on consomme jusqu'au bout (SSE live = Plan 2)
     doc = store.get_document(doc_id)
     return {"document_id": doc_id, "total_facts": doc["total_facts"],
