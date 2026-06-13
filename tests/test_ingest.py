@@ -1,3 +1,5 @@
+import io
+import zipfile
 import pytest
 import nerve.ingest as ing
 from nerve.ingest import IngestError
@@ -52,3 +54,31 @@ def test_read_html_via_trafilatura(tmp_path, monkeypatch):
     p = tmp_path / "page.html"
     p.write_text("<html><body><p>x</p></body></html>", encoding="utf-8")
     assert "corps" in ing.read_file(str(p), "page.html")
+
+
+def _make_zip(entries: dict) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        for name, content in entries.items():
+            z.writestr(name, content)
+    return buf.getvalue()
+
+def test_ingest_zip_resilient(tmp_path):
+    raw = _make_zip({"a.txt": "contenu A", "empty.txt": "", "../evil.txt": "x"})
+    segments, skipped = ing.ingest_upload("c.zip", raw, str(tmp_path / "dest"))
+    assert segments == [("contenu A", "a.txt")]      # empty ignoré, evil non extrait
+    assert skipped == ["empty.txt"]
+
+def test_ingest_zip_all_unreadable_raises(tmp_path):
+    raw = _make_zip({"empty.txt": "   "})
+    with pytest.raises(IngestError):
+        ing.ingest_upload("c.zip", raw, str(tmp_path / "dest"))
+
+def test_ingest_single_file(tmp_path):
+    segments, skipped = ing.ingest_upload("note.txt", b"un seul fichier", str(tmp_path / "d2"))
+    assert segments == [("un seul fichier", "")]
+    assert skipped == []
+
+def test_ingest_single_file_empty_raises(tmp_path):
+    with pytest.raises(IngestError):
+        ing.ingest_upload("vide.txt", b"   ", str(tmp_path / "d3"))
