@@ -22,12 +22,17 @@
   <div id="graph"></div>
 <script>
 const PAPER="#F4F6FA";
+// force-graph rend les labels en HTML (innerHTML) : on échappe le texte extrait
+// par le LLM (issu de texte utilisateur arbitraire) pour éviter un XSS stocké.
+function escapeHtml(str){
+  return str ? String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;") : "";
+}
 const G=ForceGraph()(document.getElementById("graph"))
   .backgroundColor(PAPER)
   .nodeColor(()=> "#23537F")
-  .nodeLabel(n=> n.id)
+  .nodeLabel(n=> escapeHtml(n.id))
   .linkColor(()=> "rgba(35,83,127,0.35)")
-  .linkLabel(l=> l.predicate)
+  .linkLabel(l=> escapeHtml(l.predicate))
   .linkDirectionalArrowLength(3.5).linkDirectionalArrowRelPos(0.92);
 
 function render(facts){

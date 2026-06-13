@@ -1,5 +1,6 @@
 # nerve/pipeline.py
 from typing import AsyncGenerator
+import httpx
 from nerve.config import Config
 from nerve.store import Store
 from nerve.textutil import chunk_text
@@ -8,6 +9,10 @@ from nerve.llm import stream_chat
 
 async def run_extraction(cfg: Config, store: Store, doc_id: int, text: str,
                         *, client=None) -> AsyncGenerator[dict, None]:
+    # Un seul client réutilisé sur tous les chunks (sinon stream_chat en crée et
+    # en ferme un par chunk : pas de pooling, surcoût de connexions).
+    owns_client = client is None
+    client = client or httpx.AsyncClient(timeout=None)
     try:
         for ci, chunk in enumerate(chunk_text(text)):
             parser = FactStreamParser()
@@ -28,3 +33,6 @@ async def run_extraction(cfg: Config, store: Store, doc_id: int, text: str,
         store.finish_document(doc_id, error=str(e))
         yield {"type": "error", "message": str(e)}
         raise
+    finally:
+        if owns_client:
+            await client.aclose()

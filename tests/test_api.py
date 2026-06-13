@@ -18,3 +18,10 @@ def test_create_document_and_get_facts(tmp_path, monkeypatch):
     facts = client.get(f"/api/documents/{doc_id}/facts").json()["facts"]
     assert facts[0]["subject"] == "Chat"
     assert client.get("/").status_code == 200
+
+def test_get_facts_unknown_document_returns_404(tmp_path, monkeypatch):
+    monkeypatch.setenv("NERVE_DATA_DIR", str(tmp_path))
+    import importlib, nerve.api as api
+    importlib.reload(api)
+    client = TestClient(api.app)
+    assert client.get("/api/documents/9999/facts").status_code == 404

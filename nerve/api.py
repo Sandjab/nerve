@@ -1,6 +1,6 @@
 # nerve/api.py
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 from nerve.config import load_config
@@ -31,8 +31,10 @@ async def create_document(body: CreateDoc):
 
 @app.get("/api/documents/{doc_id}/facts")
 def get_facts(doc_id: int):
-    return {"document": store.get_document(doc_id),
-            "facts": store.get_facts(doc_id)}
+    doc = store.get_document(doc_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Document introuvable")
+    return {"document": doc, "facts": store.get_facts(doc_id)}
 
 @app.get("/")
 def index():
