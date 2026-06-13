@@ -158,3 +158,17 @@ def test_sse_terminal_event_for_failed_document(tmp_path, monkeypatch):
         body = "".join(r.iter_text())
     assert '"type": "error"' in body                  # event terminal d'erreur
     assert "boom" in body
+
+def test_sets_list_and_detail(tmp_path, monkeypatch):
+    monkeypatch.setenv("NERVE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("EMBED_DIM", "3")
+    import importlib, nerve.api as api
+    importlib.reload(api)
+    s = api.store.create_set("S")
+    api.store.create_document(s, "d", "text")
+    client = TestClient(api.app)
+    lst = client.get("/api/sets").json()
+    assert any(x["id"] == s and x["document_count"] == 1 for x in lst)
+    detail = client.get(f"/api/sets/{s}").json()
+    assert detail["name"] == "S" and len(detail["documents"]) == 1
+    assert client.get("/api/sets/9999").status_code == 404

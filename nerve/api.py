@@ -3,7 +3,7 @@ import os
 import json
 import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Form, UploadFile, File
+from fastapi import FastAPI, HTTPException, Form, UploadFile, File, Query
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from nerve.config import load_config
@@ -11,6 +11,9 @@ from nerve.store import Store
 from nerve.scheduler import Scheduler, write_segments
 from nerve.transcode import transcode_url
 from nerve.ingest import ingest_upload, IngestError
+from nerve.graph import build_graph
+from nerve.entities import normalized_key
+from nerve.embeddings import embed
 
 cfg = load_config()
 store = Store(cfg.db_path, embed_dim=cfg.embed_dim)
@@ -130,6 +133,17 @@ def get_facts(doc_id: int):
     if doc is None:
         raise HTTPException(status_code=404, detail="Document introuvable")
     return {"document": doc, "facts": store.get_facts(doc_id)}
+
+@app.get("/api/sets")
+def list_sets():
+    return store.list_sets()
+
+@app.get("/api/sets/{set_id}")
+def get_set(set_id: int):
+    s = store.get_set(set_id)
+    if s is None:
+        raise HTTPException(status_code=404, detail="Set introuvable")
+    return s
 
 @app.get("/")
 def index():
