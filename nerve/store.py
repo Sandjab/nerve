@@ -3,6 +3,7 @@ import os
 import json
 import sqlite3
 import sqlite_vec
+import numpy as np
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS source_sets (
@@ -17,6 +18,8 @@ CREATE TABLE IF NOT EXISTS documents (
   total_facts INTEGER DEFAULT 0,
   unique_facts INTEGER DEFAULT 0,
   duplicate_facts INTEGER DEFAULT 0,
+  progress_segment INTEGER DEFAULT 0,
+  progress_chunk INTEGER DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now')), finished_at TEXT, error TEXT
 );
 CREATE TABLE IF NOT EXISTS facts (
@@ -55,6 +58,8 @@ class Store:
         con.enable_load_extension(True)
         sqlite_vec.load(con)
         con.enable_load_extension(False)
+        con.execute("PRAGMA journal_mode=WAL")
+        con.execute("PRAGMA busy_timeout=5000")
         con.executescript(SCHEMA)
         con.execute(
             f"CREATE VIRTUAL TABLE IF NOT EXISTS vec_facts "
@@ -136,6 +141,23 @@ class Store:
             "WHERE id = ?",
             ("failed" if error else "done", error or None, document_id))
         self.conn.commit()
+
+    def set_status(self, document_id: int, status: str) -> None:
+        self.conn.execute("UPDATE documents SET status = ? WHERE id = ?",
+                          (status, document_id))
+        self.conn.commit()
+
+    def set_progress(self, document_id: int, segment: int, chunk: int) -> None:
+        self.conn.execute(
+            "UPDATE documents SET progress_segment = ?, progress_chunk = ? WHERE id = ?",
+            (segment, chunk, document_id))
+        self.conn.commit()
+
+    def list_resumable(self) -> list[int]:
+        rows = self.conn.execute(
+            "SELECT id FROM documents WHERE status IN ('running','queued') ORDER BY id"
+        ).fetchall()
+        return [r["id"] for r in rows]
 
     def create_entity(self, document_id: int, canonical_name: str,
                       normalized_key: str) -> int:
