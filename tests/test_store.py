@@ -122,3 +122,21 @@ def test_load_entities(tmp_path):
     assert (rid, canonical, key) == (eid, "Cluny", "cluny")
     assert mention == 2
     assert all(abs(a - b) < 1e-6 for a, b in zip(vec, [1.0, 0.0]))
+
+def test_list_sets_counts_documents(tmp_path):
+    st = Store(str(tmp_path / "ls.db"), embed_dim=3); st.init_db()
+    s1 = st.create_set("Alpha"); s2 = st.create_set("Beta")
+    st.create_document(s1, "d1", "text"); st.create_document(s1, "d2", "text")
+    rows = st.list_sets()
+    by_id = {r["id"]: r for r in rows}
+    assert by_id[s1]["name"] == "Alpha" and by_id[s1]["document_count"] == 2
+    assert by_id[s2]["document_count"] == 0
+
+def test_get_set_with_documents(tmp_path):
+    st = Store(str(tmp_path / "gs.db"), embed_dim=3); st.init_db()
+    s = st.create_set("S")
+    d = st.create_document(s, "doc", "text")
+    out = st.get_set(s)
+    assert out["name"] == "S"
+    assert [doc["id"] for doc in out["documents"]] == [d]
+    assert st.get_set(9999) is None

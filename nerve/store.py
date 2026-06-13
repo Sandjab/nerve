@@ -213,3 +213,24 @@ class Store:
             "WHERE e.document_id = ?", (document_id,)).fetchall()
         return [(r["id"], r["cn"], r["nk"], r["mc"],
                  np.frombuffer(r["emb"], dtype=np.float32).tolist()) for r in rows]
+
+    def list_sets(self) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT s.id AS id, s.name AS name, s.description AS description, "
+            "COUNT(d.id) AS document_count FROM source_sets s "
+            "LEFT JOIN documents d ON d.set_id = s.id "
+            "GROUP BY s.id, s.name, s.description ORDER BY s.id").fetchall()
+        return [dict(r) for r in rows]
+
+    def get_set(self, set_id: int) -> dict | None:
+        s = self.conn.execute(
+            "SELECT * FROM source_sets WHERE id = ?", (set_id,)).fetchone()
+        if s is None:
+            return None
+        docs = self.conn.execute(
+            "SELECT id, title, source_kind, source_ref, status, total_facts, "
+            "unique_facts, duplicate_facts, created_at FROM documents "
+            "WHERE set_id = ? ORDER BY id", (set_id,)).fetchall()
+        out = dict(s)
+        out["documents"] = [dict(r) for r in docs]
+        return out
