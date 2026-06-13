@@ -27,6 +27,8 @@ async def create_document(body: CreateDoc):
         pass  # Plan 1 : on consomme jusqu'au bout (SSE live = Plan 2)
     doc = store.get_document(doc_id)
     return {"document_id": doc_id, "total_facts": doc["total_facts"],
+            "unique_facts": doc["unique_facts"],
+            "duplicate_facts": doc["duplicate_facts"],
             "status": doc["status"]}
 
 @app.get("/api/documents/{doc_id}/facts")

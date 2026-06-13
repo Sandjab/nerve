@@ -16,6 +16,9 @@ class Config:
     data_dir: str
     db_path: str
     port: int
+    entity_threshold: float
+    dedup_threshold: float
+    dedup_field: str
 
 def load_config() -> Config:
     data_dir = os.environ.get("NERVE_DATA_DIR", "data")
@@ -35,4 +38,7 @@ def load_config() -> Config:
         data_dir=data_dir,
         db_path=os.path.join(data_dir, "nerve.db"),
         port=int(os.environ.get("NERVE_PORT", "3000")),
+        entity_threshold=float(os.environ.get("ENTITY_THRESHOLD", "0.75")),
+        dedup_threshold=float(os.environ.get("DEDUP_THRESHOLD", "0.85")),
+        dedup_field=os.environ.get("DEDUP_FIELD", "triple"),
     )

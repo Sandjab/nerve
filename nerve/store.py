@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS documents (
   title TEXT, source_kind TEXT, source_ref TEXT,
   status TEXT DEFAULT 'running', params_json TEXT,
   total_facts INTEGER DEFAULT 0,
+  unique_facts INTEGER DEFAULT 0,
+  duplicate_facts INTEGER DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now')), finished_at TEXT, error TEXT
 );
 CREATE TABLE IF NOT EXISTS facts (
@@ -24,9 +26,18 @@ CREATE TABLE IF NOT EXISTS facts (
   title TEXT, description TEXT, evidence_span TEXT,
   confidence INTEGER, tags_json TEXT, source_file TEXT,
   is_duplicate INTEGER DEFAULT 0, dup_of_id INTEGER,
+  subject_entity_id INTEGER, object_entity_id INTEGER,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS entities (
+  id INTEGER PRIMARY KEY,
+  document_id INTEGER REFERENCES documents(id),
+  canonical_name TEXT NOT NULL, normalized_key TEXT NOT NULL,
+  mention_count INTEGER DEFAULT 1,
   created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_facts_doc ON facts(document_id);
+CREATE INDEX IF NOT EXISTS idx_entities_doc_key ON entities(document_id, normalized_key);
 """
 
 class Store:
@@ -49,6 +60,10 @@ class Store:
             f"CREATE VIRTUAL TABLE IF NOT EXISTS vec_facts "
             f"USING vec0(fact_id integer primary key, embedding float[{self.embed_dim}])"
         )
+        con.execute(
+            f"CREATE VIRTUAL TABLE IF NOT EXISTS vec_entities "
+            f"USING vec0(entity_id integer primary key, embedding float[{self.embed_dim}])"
+        )
         con.commit()
         self.conn = con
 
@@ -67,29 +82,46 @@ class Store:
         self.conn.commit()
         return cur.lastrowid
 
-    def add_fact(self, document_id: int, fact: dict, source_file: str = "") -> int:
+    def add_fact(self, document_id: int, fact: dict, *, is_duplicate: bool = False,
+                 dup_of_id: int | None = None, subject_entity_id: int | None = None,
+                 object_entity_id: int | None = None, source_file: str = "") -> int:
         cur = self.conn.execute(
             "INSERT INTO facts(document_id, subject, predicate, object, title, "
-            "description, evidence_span, confidence, tags_json, source_file) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?)",
+            "description, evidence_span, confidence, tags_json, source_file, "
+            "is_duplicate, dup_of_id, subject_entity_id, object_entity_id) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (document_id, fact.get("subject"), fact.get("predicate"),
              fact.get("object"), fact.get("title"), fact.get("description"),
              fact.get("evidence_span"), fact.get("confidence"),
-             json.dumps(fact.get("tags", [])), source_file))
-        self.conn.execute(
-            "UPDATE documents SET total_facts = total_facts + 1 WHERE id = ?",
-            (document_id,))
+             json.dumps(fact.get("tags", [])), source_file,
+             1 if is_duplicate else 0, dup_of_id,
+             subject_entity_id, object_entity_id))
+        if is_duplicate:
+            self.conn.execute(
+                "UPDATE documents SET total_facts = total_facts + 1, "
+                "duplicate_facts = duplicate_facts + 1 WHERE id = ?", (document_id,))
+        else:
+            self.conn.execute(
+                "UPDATE documents SET total_facts = total_facts + 1, "
+                "unique_facts = unique_facts + 1 WHERE id = ?", (document_id,))
         self.conn.commit()
         return cur.lastrowid
 
-    def get_facts(self, document_id: int) -> list[dict]:
+    def get_facts(self, document_id: int, include_duplicates: bool = False) -> list[dict]:
+        where = "" if include_duplicates else " AND f.is_duplicate = 0"
         rows = self.conn.execute(
-            "SELECT * FROM facts WHERE document_id = ? ORDER BY id", (document_id,)
-        ).fetchall()
+            "SELECT f.*, se.canonical_name AS subject_canonical, "
+            "oe.canonical_name AS object_canonical FROM facts f "
+            "LEFT JOIN entities se ON se.id = f.subject_entity_id "
+            "LEFT JOIN entities oe ON oe.id = f.object_entity_id "
+            "WHERE f.document_id = ?" + where + " ORDER BY f.id",
+            (document_id,)).fetchall()
         out = []
         for r in rows:
             d = dict(r)
             d["tags"] = json.loads(d.pop("tags_json") or "[]")
+            d["subject_canonical"] = d.get("subject_canonical") or d["subject"]
+            d["object_canonical"] = d.get("object_canonical") or d["object"]
             out.append(d)
         return out
 
@@ -103,4 +135,41 @@ class Store:
             "UPDATE documents SET status = ?, finished_at = datetime('now'), error = ? "
             "WHERE id = ?",
             ("failed" if error else "done", error or None, document_id))
+        self.conn.commit()
+
+    def create_entity(self, document_id: int, canonical_name: str,
+                      normalized_key: str) -> int:
+        cur = self.conn.execute(
+            "INSERT INTO entities(document_id, canonical_name, normalized_key) "
+            "VALUES (?, ?, ?)", (document_id, canonical_name, normalized_key))
+        self.conn.commit()
+        return cur.lastrowid
+
+    def find_entity_by_key(self, document_id: int, normalized_key: str) -> int | None:
+        r = self.conn.execute(
+            "SELECT id FROM entities WHERE document_id = ? AND normalized_key = ?",
+            (document_id, normalized_key)).fetchone()
+        return r["id"] if r else None
+
+    def set_entity_canonical(self, entity_id: int, canonical_name: str) -> None:
+        self.conn.execute("UPDATE entities SET canonical_name = ? WHERE id = ?",
+                          (canonical_name, entity_id))
+        self.conn.commit()
+
+    def bump_entity_mention(self, entity_id: int) -> None:
+        self.conn.execute(
+            "UPDATE entities SET mention_count = mention_count + 1 WHERE id = ?",
+            (entity_id,))
+        self.conn.commit()
+
+    def add_entity_vector(self, entity_id: int, embedding: list[float]) -> None:
+        self.conn.execute(
+            "INSERT INTO vec_entities(entity_id, embedding) VALUES (?, ?)",
+            (entity_id, sqlite_vec.serialize_float32(embedding)))
+        self.conn.commit()
+
+    def add_fact_vector(self, fact_id: int, embedding: list[float]) -> None:
+        self.conn.execute(
+            "INSERT INTO vec_facts(fact_id, embedding) VALUES (?, ?)",
+            (fact_id, sqlite_vec.serialize_float32(embedding)))
         self.conn.commit()

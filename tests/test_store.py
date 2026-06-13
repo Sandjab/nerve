@@ -23,3 +23,54 @@ def test_sqlite_vec_loads(tmp_path):
     st.init_db()
     cur = st.conn.execute("SELECT name FROM sqlite_master WHERE name='vec_facts'")
     assert cur.fetchone() is not None
+
+def test_entities_crud_and_vectors(tmp_path):
+    st = Store(str(tmp_path / "e.db"), embed_dim=4)
+    st.init_db()
+    set_id = st.create_set("S"); doc_id = st.create_document(set_id, "d", "text")
+    eid = st.create_entity(doc_id, canonical_name="Cluny", normalized_key="cluny")
+    assert isinstance(eid, int)
+    assert st.find_entity_by_key(doc_id, "cluny") == eid
+    assert st.find_entity_by_key(doc_id, "absent") is None
+    st.add_entity_vector(eid, [1.0, 0.0, 0.0, 0.0])      # dim 4
+    st.bump_entity_mention(eid)
+    st.set_entity_canonical(eid, "Abbaye de Cluny")
+    # vec_entities a bien 1 ligne
+    n = st.conn.execute("SELECT count(*) FROM vec_entities").fetchone()[0]
+    assert n == 1
+
+def test_vec_facts_is_populated(tmp_path):
+    st = Store(str(tmp_path / "vf.db"), embed_dim=4)
+    st.init_db()
+    set_id = st.create_set("S"); doc_id = st.create_document(set_id, "d", "text")
+    fid = st.add_fact(doc_id, {"subject": "A", "predicate": "r", "object": "B"})
+    st.add_fact_vector(fid, [0.0, 1.0, 0.0, 0.0])
+    n = st.conn.execute("SELECT count(*) FROM vec_facts").fetchone()[0]
+    assert n == 1
+
+def test_add_fact_counts_and_entities(tmp_path):
+    st = Store(str(tmp_path / "c.db"), embed_dim=4)
+    st.init_db()
+    set_id = st.create_set("S"); doc_id = st.create_document(set_id, "d", "text")
+    e1 = st.create_entity(doc_id, "A", "a"); e2 = st.create_entity(doc_id, "B", "b")
+    st.add_fact(doc_id, {"subject": "A", "predicate": "r", "object": "B"},
+                subject_entity_id=e1, object_entity_id=e2)
+    st.add_fact(doc_id, {"subject": "A", "predicate": "r", "object": "B"},
+                is_duplicate=True, dup_of_id=1)
+    doc = st.get_document(doc_id)
+    assert doc["total_facts"] == 2
+    assert doc["unique_facts"] == 1
+    assert doc["duplicate_facts"] == 1
+    facts = st.get_facts(doc_id)                 # par défaut : non-dup seulement
+    assert len(facts) == 1
+    assert facts[0]["subject_canonical"] == "A"  # nom canonique via l'entité
+
+def test_get_facts_can_include_duplicates(tmp_path):
+    st = Store(str(tmp_path / "d.db"), embed_dim=4)
+    st.init_db()
+    set_id = st.create_set("S"); doc_id = st.create_document(set_id, "d", "text")
+    st.add_fact(doc_id, {"subject": "A", "predicate": "r", "object": "B"})
+    st.add_fact(doc_id, {"subject": "A", "predicate": "r", "object": "B"},
+                is_duplicate=True, dup_of_id=1)
+    assert len(st.get_facts(doc_id)) == 1
+    assert len(st.get_facts(doc_id, include_duplicates=True)) == 2
