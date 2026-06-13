@@ -100,14 +100,16 @@ async function loadSets(){
 async function openSet(id){
   renderGraph(await (await fetch(`/api/sets/${id}/graph`)).json());
   const detail=await (await fetch(`/api/sets/${id}`)).json();
-  const sub=document.createElement("div");
+  const box=document.getElementById("sets");
+  const prev=box.querySelector("#setDocs"); if(prev) prev.remove();
+  const sub=document.createElement("div"); sub.id="setDocs";
   detail.documents.forEach(d=>{
     const el=document.createElement("div"); el.className="item"; el.style.paddingLeft="16px";
     el.textContent=`· ${d.title}`;
     el.onclick=(e)=>{ e.stopPropagation(); openDocument(d.id); };
     sub.appendChild(el);
   });
-  document.getElementById("sets").appendChild(sub);
+  box.appendChild(sub);
 }
 async function openDocument(id){
   const facts=await (await fetch(`/api/documents/${id}/facts`)).json();
