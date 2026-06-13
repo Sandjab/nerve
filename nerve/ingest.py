@@ -29,8 +29,16 @@ def _read_docx(path: str) -> str:
         doc = Document(path)
         parts = [p.text for p in doc.paragraphs]
         for table in doc.tables:
+            seen = set()        # une cellule fusionnée est répétée dans row.cells (même _tc)
             for row in table.rows:
-                parts.append("\t".join(c.text for c in row.cells))
+                cells = []
+                for c in row.cells:
+                    if id(c._tc) in seen:
+                        continue
+                    seen.add(id(c._tc))
+                    cells.append(c.text)
+                if cells:
+                    parts.append("\t".join(cells))
         return "\n".join(parts)
     except Exception as e:
         raise IngestError(f"docx illisible : {e}")

@@ -83,6 +83,18 @@ def test_ingest_single_file_empty_raises(tmp_path):
     with pytest.raises(IngestError):
         ing.ingest_upload("vide.txt", b"   ", str(tmp_path / "d3"))
 
+def test_read_docx_merged_cells_no_dup(tmp_path):
+    # python-docx répète une cellule fusionnée dans row.cells -> ne pas dupliquer son texte
+    from docx import Document
+    d = Document()
+    t = d.add_table(rows=1, cols=3)
+    t.cell(0, 0).text = "X"; t.cell(0, 1).text = "Y"; t.cell(0, 2).text = "Z"
+    t.cell(0, 0).merge(t.cell(0, 1))      # X et Y fusionnent (texte "X\nY", répété dans row.cells)
+    p = tmp_path / "m.docx"; d.save(str(p))
+    out = ing.read_file(str(p), "m.docx")
+    assert out.count("X") == 1            # le texte fusionné n'apparaît qu'une fois
+    assert "Z" in out
+
 def test_ingest_corrupt_zip_raises(tmp_path):
     # un .zip qui n'est pas une archive valide -> IngestError (pas BadZipFile nue)
     with pytest.raises(IngestError):

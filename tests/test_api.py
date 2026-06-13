@@ -69,6 +69,18 @@ def test_create_document_requires_text_or_url(tmp_path, monkeypatch):
     client = TestClient(api.app)
     assert client.post("/api/documents", json={}).status_code == 400
 
+def test_create_document_url_transcode_failure_422(tmp_path, monkeypatch):
+    # URL invalide / tous transcodeurs en échec -> erreur d'input client -> 422, pas 500
+    monkeypatch.setenv("NERVE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("EMBED_DIM", "2")
+    import importlib, nerve.api as api
+    importlib.reload(api)
+    async def boom(cfg, url, *, client=None):
+        raise RuntimeError("tous les transcodeurs ont échoué")
+    monkeypatch.setattr(api, "transcode_url", boom)
+    client = TestClient(api.app)
+    assert client.post("/api/documents", json={"url": "http://invalide"}).status_code == 422
+
 def test_upload_zip(tmp_path, monkeypatch):
     monkeypatch.setenv("NERVE_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("EMBED_DIM", "2")

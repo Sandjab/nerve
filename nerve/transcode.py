@@ -24,7 +24,7 @@ async def _trafilatura(url: str, cfg: Config, *, client) -> tuple[str, str] | No
     md = await asyncio.to_thread(trafilatura.extract, downloaded, output_format="markdown")
     if not md or not md.strip():
         return None
-    meta = trafilatura.extract_metadata(downloaded)
+    meta = await asyncio.to_thread(trafilatura.extract_metadata, downloaded)
     title = (meta.title or "") if meta else ""
     return md, title
 
