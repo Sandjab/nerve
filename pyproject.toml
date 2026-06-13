@@ -12,6 +12,7 @@ dependencies = [
   "pypdf>=4.0",
   "trafilatura>=1.8",
   "sqlite-vec>=0.1.1",
+  "python-docx>=1.1",
 ]
 
 [project.scripts]

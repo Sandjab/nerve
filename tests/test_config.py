@@ -37,3 +37,19 @@ def test_i1_overrides(monkeypatch):
     assert c.entity_threshold == 0.7
     assert c.dedup_threshold == 0.9
     assert c.dedup_field == "title"
+
+def test_transcoders_default(monkeypatch):
+    monkeypatch.delenv("URL_TRANSCODERS", raising=False)
+    c = cfgmod.load_config()
+    assert c.url_transcoders == ("trafilatura",)
+    assert c.puremd_token == ""
+    assert c.jina_key == ""
+
+def test_transcoders_override(monkeypatch):
+    monkeypatch.setenv("URL_TRANSCODERS", "trafilatura, puremd , jina")
+    monkeypatch.setenv("PUREMD_API_TOKEN", "p-tok")
+    monkeypatch.setenv("JINA_API_KEY", "j-key")
+    c = cfgmod.load_config()
+    assert c.url_transcoders == ("trafilatura", "puremd", "jina")
+    assert c.puremd_token == "p-tok"
+    assert c.jina_key == "j-key"
