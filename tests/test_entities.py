@@ -9,9 +9,12 @@ def test_normalized_key_collapses_variants():
     assert normalized_key("Cluny_Abbey") == normalized_key("Cluny Abbey")
 
 def test_lexical_guard():
-    assert lexical_guard("cluny", "cluny abbey")        # sous-chaîne / token commun
+    assert lexical_guard("cluny", "cluny abbey")        # sous-chaîne
+    assert lexical_guard("cluny abbaye", "abbaye de cluny")  # sous-ensemble de tokens (réordonné)
     assert lexical_guard("union europeenne", "ue")      # acronyme
     assert not lexical_guard("cluny", "paris")          # aucun lien lexical
+    # tokens partagés (notker, le) mais aucun sous-ensemble -> NE PAS autoriser la fusion
+    assert not lexical_guard("notker le begue", "notker le chauve")
 
 def _emb(mapping):
     async def embed_fn(text):

@@ -15,12 +15,15 @@ def _acronym(key: str) -> str:
     return "".join(w[0] for w in key.split() if w)
 
 def lexical_guard(key_a: str, key_b: str) -> bool:
-    """Vrai si un lien lexical autorise la fusion : sous-chaîne, token commun, ou acronyme."""
+    """Vrai si un lien lexical autorise la fusion : sous-chaîne, sous-ensemble de
+    tokens (l'un inclus dans l'autre), ou acronyme. Le simple token partagé ne
+    suffit PAS (sinon « Notker le Bègue » / « Notker le Chauve » fusionneraient)."""
     if not key_a or not key_b:
         return False
     if key_a in key_b or key_b in key_a:
         return True
-    if set(key_a.split()) & set(key_b.split()):
+    ta, tb = set(key_a.split()), set(key_b.split())
+    if ta <= tb or tb <= ta:
         return True
     flat_a, flat_b = key_a.replace(" ", ""), key_b.replace(" ", "")
     return _acronym(key_a) == flat_b or _acronym(key_b) == flat_a

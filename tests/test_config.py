@@ -25,7 +25,7 @@ def test_i1_defaults(monkeypatch):
     for k in ("ENTITY_THRESHOLD", "DEDUP_THRESHOLD", "DEDUP_FIELD"):
         monkeypatch.delenv(k, raising=False)
     c = cfgmod.load_config()
-    assert c.entity_threshold == 0.80
+    assert c.entity_threshold == 0.75
     assert c.dedup_threshold == 0.85
     assert c.dedup_field == "triple"
 
