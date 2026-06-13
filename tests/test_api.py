@@ -142,5 +142,19 @@ def test_sse_replay_for_done_document(tmp_path, monkeypatch):
         body = "".join(r.iter_text())
     assert '"type": "replay"' in body
     assert '"type": "status"' in body
+    assert '"type": "done"' in body                   # event terminal -> le client ferme proprement
     assert '"A"' in body                              # le fait rejoué est présent
     assert client.get("/api/documents/9999/events").status_code == 404
+
+def test_sse_terminal_event_for_failed_document(tmp_path, monkeypatch):
+    monkeypatch.setenv("NERVE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("EMBED_DIM", "2")
+    import importlib, nerve.api as api
+    importlib.reload(api)
+    doc_id = api.store.create_document(api.store.create_set("S"), "d", "text")
+    api.store.finish_document(doc_id, error="boom")   # statut failed
+    client = TestClient(api.app)
+    with client.stream("GET", f"/api/documents/{doc_id}/events") as r:
+        body = "".join(r.iter_text())
+    assert '"type": "error"' in body                  # event terminal d'erreur
+    assert "boom" in body

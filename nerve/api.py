@@ -105,7 +105,11 @@ async def document_events(doc_id: int):
             yield f"data: {json.dumps({'type': 'replay', 'facts': store.get_facts(doc_id)})}\n\n"
             doc = store.get_document(doc_id)
             yield f"data: {json.dumps({'type': 'status', 'status': doc['status'], 'total_facts': doc['total_facts'], 'unique_facts': doc['unique_facts'], 'duplicate_facts': doc['duplicate_facts']})}\n\n"
-            if doc["status"] in ("done", "failed"):
+            if doc["status"] == "done":      # event terminal -> le client ferme sans se reconnecter
+                yield f"data: {json.dumps({'type': 'done', 'total_facts': doc['total_facts'], 'unique_facts': doc['unique_facts'], 'duplicate_facts': doc['duplicate_facts']})}\n\n"
+                return
+            if doc["status"] == "failed":
+                yield f"data: {json.dumps({'type': 'error', 'message': doc.get('error') or 'extraction échouée'})}\n\n"
                 return
             while True:
                 try:

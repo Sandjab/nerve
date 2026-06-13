@@ -54,6 +54,8 @@ class Scheduler:
         lst = self._subs.get(doc_id)
         if lst and q in lst:
             lst.remove(q)
+            if not lst:                       # purge la clé devenue vide
+                self._subs.pop(doc_id, None)
 
     def emit(self, doc_id: int, ev: dict) -> None:
         for q in list(self._subs.get(doc_id, [])):
@@ -126,6 +128,9 @@ class Scheduler:
         return self.store.get_document(doc_id)
 
     def resume(self, doc_id: int) -> dict | None:
+        doc = self.store.get_document(doc_id)
+        if doc is None or doc["status"] != "paused":   # ne reprend qu'un doc en pause
+            return doc
         self._pause.discard(doc_id)
         self.enqueue(doc_id)
         return self.store.get_document(doc_id)

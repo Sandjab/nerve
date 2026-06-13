@@ -118,3 +118,21 @@ async def test_worker_marks_failed_when_process_raises(tmp_path):
     while not sub.empty():
         types.append(sub.get_nowait().get("type"))
     assert "error" in types
+
+def test_resume_ignores_non_paused(tmp_path):
+    st = Store(str(tmp_path / "rn.db"), embed_dim=2); st.init_db()
+    doc_id = st.create_document(st.create_set("S"), "d", "text")
+    st.set_status(doc_id, "running")
+    sched = Scheduler(load_config(), st, data_dir=str(tmp_path))
+    sched.resume(doc_id)
+    assert sched.queue.qsize() == 0                  # un doc non-paused n'est pas ré-enfilé
+    assert st.get_document(doc_id)["status"] == "running"
+
+def test_unsubscribe_removes_empty_key(tmp_path):
+    st = Store(str(tmp_path / "us.db"), embed_dim=2); st.init_db()
+    doc_id = st.create_document(st.create_set("S"), "d", "text")
+    sched = Scheduler(load_config(), st, data_dir=str(tmp_path))
+    q = sched.subscribe(doc_id)
+    assert doc_id in sched._subs
+    sched.unsubscribe(doc_id, q)
+    assert doc_id not in sched._subs                 # clé vidée -> purgée

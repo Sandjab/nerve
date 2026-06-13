@@ -35,18 +35,21 @@ const G=ForceGraph()(document.getElementById("graph"))
   .linkLabel(l=> escapeHtml(l.predicate))
   .linkDirectionalArrowLength(3.5).linkDirectionalArrowRelPos(0.92);
 
-let nodes=new Map(), links=[];
+let nodes=new Map(), links=[], linkKeys=new Set();
 function addFact(f){
   const s=f.subject_canonical||f.subject, o=f.object_canonical||f.object;
   if(!s||!o) return;
   nodes.set(s,{id:s}); nodes.set(o,{id:o});
+  const k=s+"\u0001"+(f.predicate||"")+"\u0001"+o;   // dédup (replay + live peuvent recouvrir)
+  if(linkKeys.has(k)) return;
+  linkKeys.add(k);
   links.push({source:s,target:o,predicate:f.predicate});
 }
 function redraw(){ G.graphData({nodes:[...nodes.values()],links}); }
 
 document.getElementById("go").addEventListener("click", async ()=>{
   const text=document.getElementById("txt").value.trim(); if(!text) return;
-  nodes=new Map(); links=[]; redraw();
+  nodes=new Map(); links=[]; linkKeys=new Set(); redraw();
   const r=await fetch("/api/documents",{method:"POST",
     headers:{"Content-Type":"application/json"},
     body:JSON.stringify({title:"Coller",text})});
