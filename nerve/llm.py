@@ -34,6 +34,10 @@ async def stream_chat(
                     obj = json.loads(data)
                 except json.JSONDecodeError:
                     continue
+                if "error" in obj:  # certains providers renvoient 200 + cadre d'erreur
+                    err = obj["error"]
+                    msg = err.get("message") if isinstance(err, dict) else str(err)
+                    raise RuntimeError(msg or str(err))
                 choices = obj.get("choices") or [{}]
                 delta = (choices[0].get("delta") or {}).get("content")
                 if delta:
