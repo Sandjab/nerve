@@ -7,6 +7,7 @@ from nerve.config import load_config
 from nerve.store import Store
 from nerve.pipeline import run_extraction
 from nerve.transcode import transcode_url
+from nerve.ingest import ingest_upload, IngestError
 from fastapi import Form, UploadFile, File
 
 cfg = load_config()
@@ -44,6 +45,28 @@ async def create_document(body: CreateDoc):
             "unique_facts": doc["unique_facts"],
             "duplicate_facts": doc["duplicate_facts"],
             "status": doc["status"]}
+
+@app.post("/api/documents/upload")
+async def upload_document(file: UploadFile = File(...), set_id: int | None = Form(None),
+                          set_name: str = Form("Défaut"), title: str = Form("")):
+    raw = await file.read()
+    sid = set_id or store.create_set(set_name)
+    doc_id = store.create_document(sid, title or file.filename, "file",
+                                   source_ref=file.filename,
+                                   params={"dedup_field": cfg.dedup_field})
+    dest = os.path.join(cfg.data_dir, "inputs", str(doc_id))
+    try:
+        segments, skipped = ingest_upload(file.filename, raw, dest)
+    except IngestError as e:
+        store.finish_document(doc_id, error=str(e))
+        raise HTTPException(status_code=422, detail=str(e))
+    async for _ in run_extraction(cfg, store, doc_id, segments):
+        pass
+    doc = store.get_document(doc_id)
+    return {"document_id": doc_id, "total_facts": doc["total_facts"],
+            "unique_facts": doc["unique_facts"],
+            "duplicate_facts": doc["duplicate_facts"],
+            "status": doc["status"], "skipped": skipped}
 
 @app.get("/api/documents/{doc_id}/facts")
 def get_facts(doc_id: int):

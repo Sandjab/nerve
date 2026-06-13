@@ -1,4 +1,6 @@
 # tests/test_api.py
+import io
+import zipfile
 import nerve.pipeline as pipe
 from fastapi.testclient import TestClient
 
@@ -65,3 +67,37 @@ def test_create_document_requires_text_or_url(tmp_path, monkeypatch):
     importlib.reload(api)
     client = TestClient(api.app)
     assert client.post("/api/documents", json={}).status_code == 400
+
+def test_upload_zip(tmp_path, monkeypatch):
+    monkeypatch.setenv("NERVE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("EMBED_DIM", "2")
+    monkeypatch.setattr(pipe, "stream_chat", fake_stream)
+    monkeypatch.setattr(pipe, "embed", fake_embed)
+    import importlib, nerve.api as api
+    importlib.reload(api)
+    client = TestClient(api.app)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("a.txt", "le chat dort")
+        z.writestr("bad.txt", "")                   # vide -> skipped
+    r = client.post("/api/documents/upload",
+                    files={"file": ("c.zip", buf.getvalue(), "application/zip")},
+                    data={"set_name": "S"})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["skipped"] == ["bad.txt"]
+    assert body["total_facts"] == 2                 # fake_stream émet 2 faits (1 doublon)
+    doc = client.get(f"/api/documents/{body['document_id']}/facts").json()["document"]
+    assert doc["source_kind"] == "file"
+    assert doc["source_ref"] == "c.zip"
+
+def test_upload_unreadable_file_fails_loud(tmp_path, monkeypatch):
+    monkeypatch.setenv("NERVE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("EMBED_DIM", "2")
+    import importlib, nerve.api as api
+    importlib.reload(api)
+    client = TestClient(api.app)
+    r = client.post("/api/documents/upload",
+                    files={"file": ("vide.txt", b"   ", "text/plain")},
+                    data={"set_name": "S"})
+    assert r.status_code == 422
