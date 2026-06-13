@@ -102,3 +102,23 @@ class Scheduler:
             except asyncio.CancelledError:
                 pass
             self._task = None
+
+    def reconcile(self) -> None:
+        """Au démarrage : ré-enfile les docs interrompus par un crash (running/queued)."""
+        for doc_id in self.store.list_resumable():
+            self.enqueue(doc_id)
+
+    def pause(self, doc_id: int) -> dict | None:
+        doc = self.store.get_document(doc_id)
+        if doc is None or doc["status"] in ("done", "failed"):
+            return doc
+        if doc["status"] == "running":
+            self._pause.add(doc_id)            # honoré au prochain round_end
+        else:
+            self.store.set_status(doc_id, "paused")
+        return self.store.get_document(doc_id)
+
+    def resume(self, doc_id: int) -> dict | None:
+        self._pause.discard(doc_id)
+        self.enqueue(doc_id)
+        return self.store.get_document(doc_id)
