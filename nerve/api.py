@@ -145,6 +145,12 @@ def get_set(set_id: int):
         raise HTTPException(status_code=404, detail="Set introuvable")
     return s
 
+@app.get("/api/sets/{set_id}/graph")
+def set_graph(set_id: int, min_conf: int | None = None):
+    if store.get_set(set_id) is None:
+        raise HTTPException(status_code=404, detail="Set introuvable")
+    return build_graph(store.facts_for_set(set_id, min_conf))
+
 @app.get("/")
 def index():
     return FileResponse(os.path.join(WEB, "index.html"))

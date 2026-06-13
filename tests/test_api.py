@@ -159,6 +159,25 @@ def test_sse_terminal_event_for_failed_document(tmp_path, monkeypatch):
     assert '"type": "error"' in body                  # event terminal d'erreur
     assert "boom" in body
 
+def test_set_graph(tmp_path, monkeypatch):
+    monkeypatch.setenv("NERVE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("EMBED_DIM", "3")
+    import importlib, nerve.api as api
+    importlib.reload(api)
+    s = api.store.create_set("S")
+    d1 = api.store.create_document(s, "d1", "text")
+    d2 = api.store.create_document(s, "d2", "text")
+    for d in (d1, d2):                                  # "Cluny" présent dans 2 documents
+        se = api.store.create_entity(d, "Cluny", "cluny")
+        oe = api.store.create_entity(d, "Abbaye", "abbaye")
+        api.store.add_fact(d, {"subject": "Cluny", "predicate": "est", "object": "Abbaye"},
+                           subject_entity_id=se, object_entity_id=oe)
+    client = TestClient(api.app)
+    g = client.get(f"/api/sets/{s}/graph").json()
+    assert sorted(n["id"] for n in g["nodes"]) == ["abbaye", "cluny"]   # collapse cross-doc
+    assert len(g["links"]) == 1
+    assert client.get("/api/sets/9999/graph").status_code == 404
+
 def test_sets_list_and_detail(tmp_path, monkeypatch):
     monkeypatch.setenv("NERVE_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("EMBED_DIM", "3")
