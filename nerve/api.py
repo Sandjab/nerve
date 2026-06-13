@@ -81,6 +81,19 @@ def get_document(doc_id: int):
         raise HTTPException(status_code=404, detail="Document introuvable")
     return doc
 
+@app.post("/api/documents/{doc_id}/pause")
+def pause_document(doc_id: int):
+    doc = scheduler.pause(doc_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Document introuvable")
+    return doc
+
+@app.post("/api/documents/{doc_id}/resume")
+def resume_document(doc_id: int):
+    if store.get_document(doc_id) is None:
+        raise HTTPException(status_code=404, detail="Document introuvable")
+    return scheduler.resume(doc_id)
+
 @app.get("/api/documents/{doc_id}/facts")
 def get_facts(doc_id: int):
     doc = store.get_document(doc_id)

@@ -116,3 +116,15 @@ def test_upload_corrupt_zip_fails_loud(tmp_path, monkeypatch):
     last = api.store.conn.execute(
         "SELECT status FROM documents ORDER BY id DESC LIMIT 1").fetchone()
     assert last["status"] == "failed"      # le document n'est pas laissé en 'running'
+
+def test_pause_resume_routes(tmp_path, monkeypatch):
+    monkeypatch.setenv("NERVE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("EMBED_DIM", "2")
+    import importlib, nerve.api as api
+    importlib.reload(api)
+    client = TestClient(api.app)
+    doc_id = api.store.create_document(api.store.create_set("S"), "d", "text")
+    api.store.set_status(doc_id, "queued")
+    assert client.post(f"/api/documents/{doc_id}/pause").json()["status"] == "paused"
+    assert client.post(f"/api/documents/{doc_id}/resume").json()["status"] == "queued"
+    assert client.post("/api/documents/9999/pause").status_code == 404
