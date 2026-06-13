@@ -20,3 +20,20 @@ def test_env_override(monkeypatch):
     assert c.llm.base_url == "https://openrouter.ai/api/v1"
     assert c.llm.model == "anthropic/claude-3.5"
     assert c.embed_dim == 768
+
+def test_i1_defaults(monkeypatch):
+    for k in ("ENTITY_THRESHOLD", "DEDUP_THRESHOLD", "DEDUP_FIELD"):
+        monkeypatch.delenv(k, raising=False)
+    c = cfgmod.load_config()
+    assert c.entity_threshold == 0.80
+    assert c.dedup_threshold == 0.85
+    assert c.dedup_field == "triple"
+
+def test_i1_overrides(monkeypatch):
+    monkeypatch.setenv("ENTITY_THRESHOLD", "0.7")
+    monkeypatch.setenv("DEDUP_THRESHOLD", "0.9")
+    monkeypatch.setenv("DEDUP_FIELD", "title")
+    c = cfgmod.load_config()
+    assert c.entity_threshold == 0.7
+    assert c.dedup_threshold == 0.9
+    assert c.dedup_field == "title"
