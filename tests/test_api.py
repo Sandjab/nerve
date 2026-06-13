@@ -209,3 +209,29 @@ def test_search_endpoint(tmp_path, monkeypatch):
     res = client.get("/api/search?q=cluny&k=1").json()
     assert res["results"][0]["fact_id"] == fa
     assert client.get("/api/search?q=").status_code == 400
+
+def test_transverse_endpoint(tmp_path, monkeypatch):
+    monkeypatch.setenv("NERVE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("EMBED_DIM", "3")
+    import importlib, nerve.api as api
+    importlib.reload(api)
+    s = api.store.create_set("S")
+    d1 = api.store.create_document(s, "d1", "text")
+    d2 = api.store.create_document(s, "d2", "text")
+    for d in (d1, d2):                                  # "Cluny" dans 2 documents
+        se = api.store.create_entity(d, "Cluny", "cluny"); api.store.add_entity_vector(se, [1.0, 0.0, 0.0])
+        oe = api.store.create_entity(d, "Abbaye", "abbaye"); api.store.add_entity_vector(oe, [0.0, 1.0, 0.0])
+        api.store.add_fact(d, {"subject": "Cluny", "predicate": "est", "object": "Abbaye"},
+                           subject_entity_id=se, object_entity_id=oe)
+    async def fake_embed(cfg, texts, *, client=None):
+        return [[1.0, 0.0, 0.0]]                        # proche des entités "cluny"
+    monkeypatch.setattr(api, "embed", fake_embed)
+    client = TestClient(api.app)
+    g = client.get("/api/transverse?entity=Cluny&k=5").json()
+    keys = {n["id"] for n in g["nodes"]}
+    assert "cluny" in keys and "abbaye" in keys
+    assert len(g["links"]) >= 1
+    # entité absente -> graphe vide (entities_by_key vide -> pas de voisinage)
+    empty = client.get("/api/transverse?entity=Inconnu&k=1").json()
+    assert empty == {"nodes": [], "links": []}
+    assert client.get("/api/transverse?entity=").status_code == 400

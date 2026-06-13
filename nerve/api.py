@@ -158,6 +158,20 @@ async def search(q: str, sets: list[int] | None = Query(None), k: int = 20):
     vec = (await embed(cfg.embed, [q]))[0]
     return {"results": store.search_facts(vec, k, sets)}
 
+@app.get("/api/transverse")
+async def transverse(entity: str, sets: list[int] | None = Query(None),
+                     min_conf: int | None = None, k: int = 10):
+    if not entity.strip():
+        raise HTTPException(status_code=400, detail="entity requis")
+    occ = store.entities_by_key(normalized_key(entity), sets)
+    if not occ:
+        return {"nodes": [], "links": []}              # entité absente -> graphe vide
+    ids = {e["id"] for e in occ}
+    vec = (await embed(cfg.embed, [entity]))[0]
+    for n in store.entity_neighbors(vec, k, sets):
+        ids.add(n["entity_id"])
+    return build_graph(store.facts_for_entities(list(ids), min_conf))
+
 @app.get("/")
 def index():
     return FileResponse(os.path.join(WEB, "index.html"))
