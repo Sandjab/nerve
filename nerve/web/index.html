@@ -35,26 +35,30 @@ const G=ForceGraph()(document.getElementById("graph"))
   .linkLabel(l=> escapeHtml(l.predicate))
   .linkDirectionalArrowLength(3.5).linkDirectionalArrowRelPos(0.92);
 
-function render(facts){
-  const nodes=new Map(), links=[];
-  for(const f of facts){
-    const s = f.subject_canonical || f.subject;
-    const o = f.object_canonical || f.object;
-    if(!s||!o) continue;
-    nodes.set(s,{id:s}); nodes.set(o,{id:o});
-    links.push({source:s,target:o,predicate:f.predicate});
-  }
-  G.graphData({nodes:[...nodes.values()],links});
+let nodes=new Map(), links=[];
+function addFact(f){
+  const s=f.subject_canonical||f.subject, o=f.object_canonical||f.object;
+  if(!s||!o) return;
+  nodes.set(s,{id:s}); nodes.set(o,{id:o});
+  links.push({source:s,target:o,predicate:f.predicate});
 }
+function redraw(){ G.graphData({nodes:[...nodes.values()],links}); }
 
 document.getElementById("go").addEventListener("click", async ()=>{
   const text=document.getElementById("txt").value.trim(); if(!text) return;
+  nodes=new Map(); links=[]; redraw();
   const r=await fetch("/api/documents",{method:"POST",
     headers:{"Content-Type":"application/json"},
     body:JSON.stringify({title:"Coller",text})});
   const {document_id}=await r.json();
-  const data=await (await fetch(`/api/documents/${document_id}/facts`)).json();
-  render(data.facts);
+  const es=new EventSource(`/api/documents/${document_id}/events`);
+  es.onmessage=(e)=>{
+    const m=JSON.parse(e.data);
+    if(m.type==="replay"){ m.facts.forEach(addFact); redraw(); }
+    else if(m.type==="fact" && !m.is_duplicate){ addFact(m.fact); redraw(); }
+    else if(m.type==="done"||m.type==="error"){ es.close(); }
+  };
+  es.onerror=()=>es.close();
 });
 </script>
 </body>
