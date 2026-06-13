@@ -264,6 +264,55 @@ class Store:
                 break
         return out
 
+    def entities_by_key(self, normalized_key: str,
+                        sets: list[int] | None = None) -> list[dict]:
+        sql = ("SELECT e.id AS id, e.normalized_key AS normalized_key, "
+               "e.canonical_name AS canonical_name, e.document_id AS document_id, "
+               "d.set_id AS set_id FROM entities e "
+               "JOIN documents d ON d.id = e.document_id WHERE e.normalized_key = ?")
+        params: list = [normalized_key]
+        if sets:
+            sql += " AND d.set_id IN (%s)" % ",".join("?" * len(sets))
+            params += list(sets)
+        return [dict(r) for r in self.conn.execute(sql, params).fetchall()]
+
+    def entity_neighbors(self, query_vec: list[float], k: int,
+                         sets: list[int] | None = None) -> list[dict]:
+        knn_k = k if not sets else max(k * 10, 100)
+        rows = self.conn.execute(
+            "SELECT v.entity_id AS entity_id, v.distance AS distance, "
+            "e.normalized_key AS normalized_key, e.canonical_name AS canonical_name, "
+            "d.set_id AS set_id FROM vec_entities v "
+            "JOIN entities e ON e.id = v.entity_id "
+            "JOIN documents d ON d.id = e.document_id "
+            "WHERE v.embedding MATCH ? AND k = ?",
+            (sqlite_vec.serialize_float32(query_vec), knn_k)).fetchall()
+        out: list[dict] = []
+        for r in rows:
+            if sets and r["set_id"] not in sets:
+                continue
+            out.append(dict(r))
+            if len(out) >= k:
+                break
+        return out
+
+    def facts_for_entities(self, entity_ids: list[int],
+                           min_conf: int | None = None) -> list[dict]:
+        if not entity_ids:
+            return []
+        ph = ",".join("?" * len(entity_ids))
+        sql = ("SELECT " + self._GRAPH_COLS + " FROM facts f "
+               "JOIN entities se ON se.id = f.subject_entity_id "
+               "JOIN entities oe ON oe.id = f.object_entity_id "
+               "WHERE f.is_duplicate = 0 AND "
+               f"(f.subject_entity_id IN ({ph}) OR f.object_entity_id IN ({ph}))")
+        params: list = list(entity_ids) + list(entity_ids)
+        if min_conf is not None:
+            sql += " AND f.confidence >= ?"
+            params.append(min_conf)
+        sql += " ORDER BY f.id"
+        return [dict(r) for r in self.conn.execute(sql, params).fetchall()]
+
     def get_set(self, set_id: int) -> dict | None:
         s = self.conn.execute(
             "SELECT * FROM source_sets WHERE id = ?", (set_id,)).fetchone()

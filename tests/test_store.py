@@ -177,3 +177,34 @@ def test_search_facts_knn_and_set_filter(tmp_path):
     res_b = st.search_facts([1.0, 0.0, 0.0], k=1, sets=[sb])
     assert [r["fact_id"] for r in res_b] == [fb]
     assert res_b[0]["set_id"] == sb
+
+def test_entities_by_key_cross_document(tmp_path):
+    st = Store(str(tmp_path / "ebk.db"), embed_dim=3); st.init_db()
+    s = st.create_set("S")
+    d1 = st.create_document(s, "d1", "text"); d2 = st.create_document(s, "d2", "text")
+    e1 = st.create_entity(d1, "Cluny", "cluny")
+    e2 = st.create_entity(d2, "cluny", "cluny")
+    st.create_entity(d1, "Autre", "autre")
+    got = {e["id"] for e in st.entities_by_key("cluny")}
+    assert got == {e1, e2}
+
+def test_entity_neighbors_knn(tmp_path):
+    st = Store(str(tmp_path / "en.db"), embed_dim=3); st.init_db()
+    s = st.create_set("S"); d = st.create_document(s, "d", "text")
+    e1 = st.create_entity(d, "Cluny", "cluny"); st.add_entity_vector(e1, [1.0, 0.0, 0.0])
+    e2 = st.create_entity(d, "Loin", "loin"); st.add_entity_vector(e2, [0.0, 1.0, 0.0])
+    res = st.entity_neighbors([1.0, 0.0, 0.0], k=1)
+    assert res[0]["entity_id"] == e1 and res[0]["normalized_key"] == "cluny"
+
+def test_facts_for_entities(tmp_path):
+    st = Store(str(tmp_path / "ffe.db"), embed_dim=3); st.init_db()
+    s = st.create_set("S"); d = st.create_document(s, "d", "text")
+    se = st.create_entity(d, "Cluny", "cluny"); oe = st.create_entity(d, "Abbaye", "abbaye")
+    other = st.create_entity(d, "X", "x")
+    f = st.add_fact(d, {"subject": "Cluny", "predicate": "est", "object": "Abbaye"},
+                    subject_entity_id=se, object_entity_id=oe)
+    st.add_fact(d, {"subject": "X", "predicate": "p", "object": "X"},
+                subject_entity_id=other, object_entity_id=other)
+    rows = st.facts_for_entities([se])
+    assert [r["fact_id"] for r in rows] == [f]
+    assert rows[0]["s_key"] == "cluny" and rows[0]["o_key"] == "abbaye"
