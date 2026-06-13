@@ -15,6 +15,8 @@ CREATE TABLE IF NOT EXISTS documents (
   title TEXT, source_kind TEXT, source_ref TEXT,
   status TEXT DEFAULT 'running', params_json TEXT,
   total_facts INTEGER DEFAULT 0,
+  unique_facts INTEGER DEFAULT 0,
+  duplicate_facts INTEGER DEFAULT 0,
   created_at TEXT DEFAULT (datetime('now')), finished_at TEXT, error TEXT
 );
 CREATE TABLE IF NOT EXISTS facts (
@@ -24,9 +26,18 @@ CREATE TABLE IF NOT EXISTS facts (
   title TEXT, description TEXT, evidence_span TEXT,
   confidence INTEGER, tags_json TEXT, source_file TEXT,
   is_duplicate INTEGER DEFAULT 0, dup_of_id INTEGER,
+  subject_entity_id INTEGER, object_entity_id INTEGER,
+  created_at TEXT DEFAULT (datetime('now'))
+);
+CREATE TABLE IF NOT EXISTS entities (
+  id INTEGER PRIMARY KEY,
+  document_id INTEGER REFERENCES documents(id),
+  canonical_name TEXT NOT NULL, normalized_key TEXT NOT NULL,
+  mention_count INTEGER DEFAULT 1,
   created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_facts_doc ON facts(document_id);
+CREATE INDEX IF NOT EXISTS idx_entities_doc_key ON entities(document_id, normalized_key);
 """
 
 class Store:
@@ -48,6 +59,10 @@ class Store:
         con.execute(
             f"CREATE VIRTUAL TABLE IF NOT EXISTS vec_facts "
             f"USING vec0(fact_id integer primary key, embedding float[{self.embed_dim}])"
+        )
+        con.execute(
+            f"CREATE VIRTUAL TABLE IF NOT EXISTS vec_entities "
+            f"USING vec0(entity_id integer primary key, embedding float[{self.embed_dim}])"
         )
         con.commit()
         self.conn = con
@@ -103,4 +118,41 @@ class Store:
             "UPDATE documents SET status = ?, finished_at = datetime('now'), error = ? "
             "WHERE id = ?",
             ("failed" if error else "done", error or None, document_id))
+        self.conn.commit()
+
+    def create_entity(self, document_id: int, canonical_name: str,
+                      normalized_key: str) -> int:
+        cur = self.conn.execute(
+            "INSERT INTO entities(document_id, canonical_name, normalized_key) "
+            "VALUES (?, ?, ?)", (document_id, canonical_name, normalized_key))
+        self.conn.commit()
+        return cur.lastrowid
+
+    def find_entity_by_key(self, document_id: int, normalized_key: str) -> int | None:
+        r = self.conn.execute(
+            "SELECT id FROM entities WHERE document_id = ? AND normalized_key = ?",
+            (document_id, normalized_key)).fetchone()
+        return r["id"] if r else None
+
+    def set_entity_canonical(self, entity_id: int, canonical_name: str) -> None:
+        self.conn.execute("UPDATE entities SET canonical_name = ? WHERE id = ?",
+                          (canonical_name, entity_id))
+        self.conn.commit()
+
+    def bump_entity_mention(self, entity_id: int) -> None:
+        self.conn.execute(
+            "UPDATE entities SET mention_count = mention_count + 1 WHERE id = ?",
+            (entity_id,))
+        self.conn.commit()
+
+    def add_entity_vector(self, entity_id: int, embedding: list[float]) -> None:
+        self.conn.execute(
+            "INSERT INTO vec_entities(entity_id, embedding) VALUES (?, ?)",
+            (entity_id, sqlite_vec.serialize_float32(embedding)))
+        self.conn.commit()
+
+    def add_fact_vector(self, fact_id: int, embedding: list[float]) -> None:
+        self.conn.execute(
+            "INSERT INTO vec_facts(fact_id, embedding) VALUES (?, ?)",
+            (fact_id, sqlite_vec.serialize_float32(embedding)))
         self.conn.commit()
