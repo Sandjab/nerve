@@ -57,3 +57,32 @@ async def _puremd(url: str, cfg: Config, *, client) -> tuple[str, str] | None:
     if not text.strip():
         return None
     return text, _first_title(text)
+
+
+BACKENDS = {"trafilatura": _trafilatura, "puremd": _puremd, "jina": _jina}
+
+
+async def transcode_url(cfg: Config, url: str, *, client=None) -> tuple[str, str]:
+    """Parcourt cfg.url_transcoders dans l'ordre, retient le 1er markdown non vide.
+    Repli sur échec/vide ; fail-loud si TOUS les backends échouent."""
+    owns = client is None
+    client = client or httpx.AsyncClient(timeout=30)
+    errors = []
+    try:
+        for name in cfg.url_transcoders:
+            backend = BACKENDS.get(name)
+            if backend is None:
+                errors.append(f"{name}: inconnu")
+                continue
+            try:
+                res = await backend(url, cfg, client=client)
+            except Exception as e:
+                errors.append(f"{name}: {e}")
+                continue
+            if res and res[0].strip():
+                return res
+            errors.append(f"{name}: vide")
+        raise RuntimeError(f"Transcodage échoué pour {url} ({'; '.join(errors)})")
+    finally:
+        if owns:
+            await client.aclose()

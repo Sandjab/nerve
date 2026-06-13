@@ -1,3 +1,4 @@
+import pytest
 import httpx
 import nerve.transcode as tc
 from nerve.config import load_config
@@ -63,3 +64,35 @@ async def test_puremd_backend(monkeypatch):
 async def test_puremd_skips_without_key(monkeypatch):
     monkeypatch.delenv("PUREMD_API_TOKEN", raising=False)
     assert await tc._puremd("http://x", load_config(), client=None) is None
+
+
+async def test_chain_uses_first_non_empty(monkeypatch):
+    async def empty(url, cfg, *, client):
+        return None
+    async def good(url, cfg, *, client):
+        return ("md ok", "T")
+    monkeypatch.setattr(tc, "BACKENDS", {"a": empty, "b": good})
+    monkeypatch.setenv("URL_TRANSCODERS", "a,b")
+    md, title = await tc.transcode_url(load_config(), "http://x")
+    assert md == "md ok"
+    assert title == "T"
+
+async def test_chain_skips_failing_backend(monkeypatch):
+    async def boom(url, cfg, *, client):
+        raise RuntimeError("backend HS")
+    async def good(url, cfg, *, client):
+        return ("ok", "")
+    monkeypatch.setattr(tc, "BACKENDS", {"a": boom, "b": good})
+    monkeypatch.setenv("URL_TRANSCODERS", "a,b")
+    md, _ = await tc.transcode_url(load_config(), "http://x")
+    assert md == "ok"
+
+async def test_all_backends_fail_raises(monkeypatch):
+    async def boom(url, cfg, *, client):
+        raise RuntimeError("nope")
+    async def empty(url, cfg, *, client):
+        return None
+    monkeypatch.setattr(tc, "BACKENDS", {"a": boom, "b": empty})
+    monkeypatch.setenv("URL_TRANSCODERS", "a,b")
+    with pytest.raises(RuntimeError):
+        await tc.transcode_url(load_config(), "http://x")
