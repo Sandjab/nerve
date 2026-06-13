@@ -27,3 +27,33 @@ async def _trafilatura(url: str, cfg: Config, *, client) -> tuple[str, str] | No
     meta = trafilatura.extract_metadata(downloaded)
     title = (meta.title or "") if meta else ""
     return md, title
+
+
+async def _jina(url: str, cfg: Config, *, client) -> tuple[str, str] | None:
+    """Jina Reader (r.jina.ai). Activé si JINA_API_KEY est défini."""
+    if not cfg.jina_key:
+        return None
+    r = await client.get(
+        f"https://r.jina.ai/{url}",
+        headers={"Authorization": f"Bearer {cfg.jina_key}", "Accept": "text/markdown"},
+    )
+    r.raise_for_status()
+    text = r.text
+    if not text.strip():
+        return None
+    return text, _first_title(text)
+
+
+async def _puremd(url: str, cfg: Config, *, client) -> tuple[str, str] | None:
+    """Pure.md (préfixe d'URL). Activé si PUREMD_API_TOKEN est défini."""
+    if not cfg.puremd_token:
+        return None
+    r = await client.get(
+        f"https://pure.md/{url}",
+        headers={"x-puremd-api-token": cfg.puremd_token},
+    )
+    r.raise_for_status()
+    text = r.text
+    if not text.strip():
+        return None
+    return text, _first_title(text)
