@@ -37,12 +37,26 @@ def _read_docx(path: str) -> str:
 
 
 def _read_html(path: str) -> str:
-    raw = open(path, encoding="utf-8", errors="ignore").read()
-    return trafilatura.extract(raw, output_format="markdown") or ""
+    try:
+        with open(path, encoding="utf-8", errors="ignore") as f:
+            raw = f.read()
+        return trafilatura.extract(raw, output_format="markdown") or ""
+    except Exception as e:
+        raise IngestError(f"HTML illisible : {e}")
+
+
+def _read_text(path: str) -> str:
+    try:
+        with open(path, encoding="utf-8", errors="ignore") as f:
+            return f.read()
+    except Exception as e:
+        raise IngestError(f"Texte illisible : {e}")
 
 
 def read_file(path: str, name: str) -> str:
-    """Extrait le texte d'un fichier. Lève IngestError si vide/illisible."""
+    """Extrait le texte d'un fichier. Lève IngestError si vide/illisible.
+    Toutes les branches convertissent leurs erreurs en IngestError -> la boucle
+    zip (qui n'attrape qu'IngestError) reste résiliente quel que soit le format."""
     ext = os.path.splitext(name)[1].lower()
     if ext == ".pdf":
         text = _read_pdf(path)
@@ -51,7 +65,7 @@ def read_file(path: str, name: str) -> str:
     elif ext in (".html", ".htm"):
         text = _read_html(path)
     else:
-        text = open(path, encoding="utf-8", errors="ignore").read()
+        text = _read_text(path)
     if not text or not text.strip():
         raise IngestError(f"Contenu vide/illisible : {name}")
     return text
@@ -77,7 +91,11 @@ def _ingest_zip(zip_path: str, dest_dir: str) -> tuple[list[tuple[str, str]], li
     skipped: list[str] = []
     had_supported = False
     root = os.path.abspath(dest_dir) + os.sep
-    with zipfile.ZipFile(zip_path) as zf:
+    try:
+        zf = zipfile.ZipFile(zip_path)
+    except (zipfile.BadZipFile, OSError) as e:
+        raise IngestError(f"Zip illisible : {e}")
+    with zf:
         for info in sorted(zf.infolist(), key=lambda i: i.filename):
             if info.is_dir():
                 continue

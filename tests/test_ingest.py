@@ -82,3 +82,19 @@ def test_ingest_single_file(tmp_path):
 def test_ingest_single_file_empty_raises(tmp_path):
     with pytest.raises(IngestError):
         ing.ingest_upload("vide.txt", b"   ", str(tmp_path / "d3"))
+
+def test_ingest_corrupt_zip_raises(tmp_path):
+    # un .zip qui n'est pas une archive valide -> IngestError (pas BadZipFile nue)
+    with pytest.raises(IngestError):
+        ing.ingest_upload("c.zip", b"ceci n'est pas un zip", str(tmp_path / "dz"))
+
+def test_ingest_zip_skips_non_ingesterror(tmp_path, monkeypatch):
+    # une erreur de lecture NON-IngestError (ici trafilatura qui lève) ne doit pas
+    # avorter le lot : le fichier fautif part dans skipped, les autres survivent.
+    def _boom(raw, **k):
+        raise ValueError("html cassé")
+    monkeypatch.setattr(ing.trafilatura, "extract", _boom)
+    raw = _make_zip({"a.txt": "bon contenu", "b.html": "<html><body>x</body></html>"})
+    segments, skipped = ing.ingest_upload("c.zip", raw, str(tmp_path / "dz2"))
+    assert segments == [("bon contenu", "a.txt")]
+    assert skipped == ["b.html"]

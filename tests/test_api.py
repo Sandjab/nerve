@@ -1,5 +1,6 @@
 # tests/test_api.py
 import io
+import json
 import zipfile
 import nerve.pipeline as pipe
 from fastapi.testclient import TestClient
@@ -59,7 +60,7 @@ def test_create_document_from_url(tmp_path, monkeypatch):
     assert doc["source_kind"] == "url"
     assert doc["source_ref"] == "https://ex.com/a"
     assert doc["title"] == "Page"                       # titre transcodé (body.title défaut)
-    assert "dedup_field" in doc["params_json"]          # M-2 corrigé
+    assert json.loads(doc["params_json"])["dedup_field"] == api.cfg.dedup_field  # M-2 corrigé
 
 def test_create_document_requires_text_or_url(tmp_path, monkeypatch):
     monkeypatch.setenv("NERVE_DATA_DIR", str(tmp_path))
@@ -101,3 +102,17 @@ def test_upload_unreadable_file_fails_loud(tmp_path, monkeypatch):
                     files={"file": ("vide.txt", b"   ", "text/plain")},
                     data={"set_name": "S"})
     assert r.status_code == 422
+
+def test_upload_corrupt_zip_fails_loud(tmp_path, monkeypatch):
+    monkeypatch.setenv("NERVE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("EMBED_DIM", "2")
+    import importlib, nerve.api as api
+    importlib.reload(api)
+    client = TestClient(api.app)
+    r = client.post("/api/documents/upload",
+                    files={"file": ("c.zip", b"pas un zip", "application/zip")},
+                    data={"set_name": "S"})
+    assert r.status_code == 422
+    last = api.store.conn.execute(
+        "SELECT status FROM documents ORDER BY id DESC LIMIT 1").fetchone()
+    assert last["status"] == "failed"      # le document n'est pas laissé en 'running'

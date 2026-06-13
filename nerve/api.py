@@ -50,13 +50,14 @@ async def create_document(body: CreateDoc):
 async def upload_document(file: UploadFile = File(...), set_id: int | None = Form(None),
                           set_name: str = Form("Défaut"), title: str = Form("")):
     raw = await file.read()
+    name = file.filename or "upload"
     sid = set_id or store.create_set(set_name)
-    doc_id = store.create_document(sid, title or file.filename, "file",
-                                   source_ref=file.filename,
+    doc_id = store.create_document(sid, title or name, "file",
+                                   source_ref=name,
                                    params={"dedup_field": cfg.dedup_field})
     dest = os.path.join(cfg.data_dir, "inputs", str(doc_id))
     try:
-        segments, skipped = ingest_upload(file.filename, raw, dest)
+        segments, skipped = ingest_upload(name, raw, dest)
     except IngestError as e:
         store.finish_document(doc_id, error=str(e))
         raise HTTPException(status_code=422, detail=str(e))
