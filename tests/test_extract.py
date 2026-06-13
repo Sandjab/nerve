@@ -24,3 +24,11 @@ def test_build_messages_includes_text():
     assert msgs[-1]["role"] == "user"
     assert "le chat dort" in msgs[-1]["content"]
     assert FACT_RESPONSE_FORMAT["type"] == "json_schema"
+
+def test_system_prompt_porte_les_regles_canoniques():
+    from nerve.extract import SYSTEM_PROMPT
+    p = SYSTEM_PROMPT.lower()
+    # règles clés : nœuds = entités canoniques, réutiliser la MÊME chaîne, pas de prose
+    assert "canonique" in p
+    assert "même chaîne" in p or "meme chaine" in p
+    assert "description" in p

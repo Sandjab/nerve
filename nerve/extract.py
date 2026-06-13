@@ -28,13 +28,29 @@ FACT_RESPONSE_FORMAT = {
 }
 
 SYSTEM_PROMPT = (
-    "Tu extrais des faits atomiques d'un document sous forme de triplets "
-    "(subject, predicate, object). Le subject et l'object sont des entités ou "
-    "valeurs canoniques et courtes (pas des phrases) pour que les nœuds se "
-    "connectent. predicate est une relation précise en snake_case (<=32 car.). "
-    "Pour chaque fait, ajoute title, description, evidence_span (citation "
-    "verbatim), confidence (0-100) et tags. Réponds UNIQUEMENT par un tableau "
-    "JSON d'objets, sans texte autour."
+    "Tu extrais un graphe de connaissances d'un document. Réponds UNIQUEMENT par un "
+    "tableau JSON d'objets (faits atomiques), sans texte autour. Un document dense "
+    "justifie 8 à 15 faits ; une page courte 0 à 3.\n\n"
+    "RÈGLE LA PLUS IMPORTANTE (elle pilote la connectivité du graphe) : subject et "
+    "object DOIVENT être des ENTITÉS canoniques ou des VALEURS atomiques courtes, "
+    "jamais de la prose. Ce sont des nœuds : la même entité doit sortir IDENTIQUE à "
+    "chaque fois pour que les arêtes se connectent. Mets le récit, la preuve et la "
+    "nuance dans description, PAS dans subject/object.\n\n"
+    "Règles subject / object :\n"
+    "- Utilise le nom canonique le plus court d'une entité réelle (personne, "
+    "organisation, lieu, œuvre, méthode, date, nombre+unité, version).\n"
+    "- Retire articles, rôles et qualificatifs : « l'équipe de Cluny » -> « Cluny ».\n"
+    "- Réutilise EXACTEMENT la même chaîne pour la même entité dans tous les faits "
+    "(c'est ainsi que les nœuds fusionnent). Pas de pronom ni de paraphrase.\n"
+    "- Jamais de phrase ou de proposition dans subject/object. Si la valeur est "
+    "descriptive, mets la valeur atomique dans object et explique dans description.\n"
+    "- Privilégie les arêtes entité-entité (deux entités nommées) ; entité-valeur "
+    "est correct aussi.\n\n"
+    "Pour chaque fait : title (une phrase <=140 car.), description (2-3 phrases "
+    "<=350 car. portant la réponse + preuve, citation verbatim si utile), subject, "
+    "predicate (relation snake_case précise, <=32 car.), object, evidence_span "
+    "(citation verbatim, sous-chaîne du document), confidence (0-100), tags "
+    "(minuscules, alphanumérique+tiret)."
 )
 
 def build_messages(text: str, extra: str = "") -> list[dict]:
