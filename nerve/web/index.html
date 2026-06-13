@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>nerve</title>
+<script src="https://unpkg.com/force-graph@1.43.5/dist/force-graph.min.js"></script>
+<style>
+  :root{--paper:#F4F6FA;--ink:#15202E;--blue:#23537F;--blue-deep:#142E49;--bordeaux:#7C2A38;--line:#D7DFE9}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--paper);color:var(--ink);font-family:-apple-system,system-ui,sans-serif}
+  #top{display:flex;gap:8px;padding:10px;background:var(--blue-deep)}
+  #top textarea{flex:1;height:46px;border-radius:6px;border:1px solid var(--line);padding:8px;font-family:inherit}
+  #top button{background:#2C77B6;color:#fff;border:0;border-radius:6px;padding:0 16px;cursor:pointer}
+  #graph{position:absolute;left:0;right:0;bottom:0;top:66px}
+</style>
+</head>
+<body>
+  <div id="top">
+    <textarea id="txt" placeholder="Colle un texte à transformer en graphe…"></textarea>
+    <button id="go">Extraire</button>
+  </div>
+  <div id="graph"></div>
+<script>
+const PAPER="#F4F6FA";
+// force-graph rend les labels en HTML (innerHTML) : on échappe le texte extrait
+// par le LLM (issu de texte utilisateur arbitraire) pour éviter un XSS stocké.
+function escapeHtml(str){
+  return str ? String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;") : "";
+}
+const G=ForceGraph()(document.getElementById("graph"))
+  .backgroundColor(PAPER)
+  .nodeColor(()=> "#23537F")
+  .nodeLabel(n=> escapeHtml(n.id))
+  .linkColor(()=> "rgba(35,83,127,0.35)")
+  .linkLabel(l=> escapeHtml(l.predicate))
+  .linkDirectionalArrowLength(3.5).linkDirectionalArrowRelPos(0.92);
+
+function render(facts){
+  const nodes=new Map(), links=[];
+  for(const f of facts){
+    if(!f.subject||!f.object) continue;
+    nodes.set(f.subject,{id:f.subject}); nodes.set(f.object,{id:f.object});
+    links.push({source:f.subject,target:f.object,predicate:f.predicate});
+  }
+  G.graphData({nodes:[...nodes.values()],links});
+}
+
+document.getElementById("go").addEventListener("click", async ()=>{
+  const text=document.getElementById("txt").value.trim(); if(!text) return;
+  const r=await fetch("/api/documents",{method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({title:"Coller",text})});
+  const {document_id}=await r.json();
+  const data=await (await fetch(`/api/documents/${document_id}/facts`)).json();
+  render(data.facts);
+});
+</script>
+</body>
+</html>

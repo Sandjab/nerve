@@ -1,0 +1,38 @@
+# nerve/config.py
+import os
+from dataclasses import dataclass
+
+@dataclass(frozen=True)
+class ProviderConfig:
+    base_url: str
+    api_key: str
+    model: str
+
+@dataclass(frozen=True)
+class Config:
+    llm: ProviderConfig
+    embed: ProviderConfig
+    embed_dim: int
+    data_dir: str
+    db_path: str
+    port: int
+
+def load_config() -> Config:
+    data_dir = os.environ.get("NERVE_DATA_DIR", "data")
+    llm = ProviderConfig(
+        base_url=os.environ.get("LLM_BASE_URL", "http://localhost:11434/v1"),
+        api_key=os.environ.get("LLM_API_KEY", "ollama"),
+        model=os.environ.get("LLM_MODEL", "qwen3.6"),
+    )
+    embed = ProviderConfig(
+        base_url=os.environ.get("EMBED_BASE_URL", "http://localhost:11434/v1"),
+        api_key=os.environ.get("EMBED_API_KEY", "ollama"),
+        model=os.environ.get("EMBED_MODEL", "bge-m3"),
+    )
+    return Config(
+        llm=llm, embed=embed,
+        embed_dim=int(os.environ.get("EMBED_DIM", "1024")),
+        data_dir=data_dir,
+        db_path=os.path.join(data_dir, "nerve.db"),
+        port=int(os.environ.get("NERVE_PORT", "3000")),
+    )

@@ -1,0 +1,18 @@
+# Données & artefacts locaux
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# Brainstorming visuel (compagnon)
+.superpowers/
+
+# Python / uv
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+
+# OS
+.DS_Store
