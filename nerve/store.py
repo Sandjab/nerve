@@ -195,3 +195,21 @@ class Store:
             "INSERT INTO vec_facts(fact_id, embedding) VALUES (?, ?)",
             (fact_id, sqlite_vec.serialize_float32(embedding)))
         self.conn.commit()
+
+    def load_fact_vectors(self, document_id: int) -> list[tuple[int, list[float]]]:
+        """(fact_id, vecteur) des faits NON-dup du doc, depuis vec_facts."""
+        rows = self.conn.execute(
+            "SELECT v.fact_id AS fid, v.embedding AS emb FROM vec_facts v "
+            "JOIN facts f ON f.id = v.fact_id "
+            "WHERE f.document_id = ? AND f.is_duplicate = 0", (document_id,)).fetchall()
+        return [(r["fid"], np.frombuffer(r["emb"], dtype=np.float32).tolist()) for r in rows]
+
+    def load_entities(self, document_id: int) -> list[tuple[int, str, str, int, list[float]]]:
+        """(id, canonical_name, normalized_key, mention_count, vecteur) du doc."""
+        rows = self.conn.execute(
+            "SELECT e.id AS id, e.canonical_name AS cn, e.normalized_key AS nk, "
+            "e.mention_count AS mc, v.embedding AS emb FROM entities e "
+            "JOIN vec_entities v ON v.entity_id = e.id "
+            "WHERE e.document_id = ?", (document_id,)).fetchall()
+        return [(r["id"], r["cn"], r["nk"], r["mc"],
+                 np.frombuffer(r["emb"], dtype=np.float32).tolist()) for r in rows]

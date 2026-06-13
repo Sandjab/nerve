@@ -97,3 +97,28 @@ def test_list_resumable(tmp_path):
     d3 = st.create_document(s, "3", "text"); st.finish_document(d3)  # done
     d4 = st.create_document(s, "4", "text"); st.set_status(d4, "paused")
     assert st.list_resumable() == [d1, d2]
+
+def test_load_fact_vectors(tmp_path):
+    st = Store(str(tmp_path / "lfv.db"), embed_dim=3); st.init_db()
+    doc_id = st.create_document(st.create_set("S"), "d", "text")
+    f1 = st.add_fact(doc_id, {"subject": "A", "predicate": "r", "object": "B"})
+    st.add_fact_vector(f1, [0.1, 0.2, 0.3])
+    f2 = st.add_fact(doc_id, {"subject": "A", "predicate": "r", "object": "B"},
+                     is_duplicate=True, dup_of_id=f1)            # dup -> pas de vecteur
+    rows = st.load_fact_vectors(doc_id)
+    assert len(rows) == 1
+    fid, vec = rows[0]
+    assert fid == f1
+    assert all(abs(a - b) < 1e-6 for a, b in zip(vec, [0.1, 0.2, 0.3]))
+
+def test_load_entities(tmp_path):
+    st = Store(str(tmp_path / "le.db"), embed_dim=2); st.init_db()
+    doc_id = st.create_document(st.create_set("S"), "d", "text")
+    eid = st.create_entity(doc_id, "Cluny", "cluny"); st.add_entity_vector(eid, [1.0, 0.0])
+    st.bump_entity_mention(eid)
+    rows = st.load_entities(doc_id)
+    assert len(rows) == 1
+    rid, canonical, key, mention, vec = rows[0]
+    assert (rid, canonical, key) == (eid, "Cluny", "cluny")
+    assert mention == 2
+    assert all(abs(a - b) < 1e-6 for a, b in zip(vec, [1.0, 0.0]))
