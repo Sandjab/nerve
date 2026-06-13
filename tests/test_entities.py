@@ -1,4 +1,5 @@
 # tests/test_entities.py
+from collections import Counter
 from nerve.store import Store
 from nerve.entities import normalized_key, lexical_guard, EntityResolver
 
@@ -48,3 +49,14 @@ async def test_resolver_merges_on_embedding_plus_lexical(tmp_path):
     a = await r.resolve("Cluny")
     b = await r.resolve("Cluny abbaye")   # clé differe, mais cos>=seuil ET garde lexical OK
     assert a == b
+
+async def test_resolver_preload_reuses_known_entity():
+    class _Store:                                       # store minimal (pas de DB)
+        def bump_entity_mention(self, eid): pass
+        def set_entity_canonical(self, eid, name): pass
+    async def emb(s): return [1.0, 0.0]
+    r = EntityResolver(_Store(), 1, emb, 0.75)
+    r.preload([(42, "Cluny", "cluny", 3, [1.0, 0.0])])
+    eid = await r.resolve("Cluny")                      # clé "cluny" connue -> réutilise 42
+    assert eid == 42
+    assert r._surface[42] == Counter({"Cluny": 4})      # mention pré-chargée + 1

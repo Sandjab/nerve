@@ -11,11 +11,12 @@ from nerve.entities import EntityResolver
 from nerve.dedup import FactDeduper
 
 async def run_extraction(cfg: Config, store: Store, doc_id: int,
-                        segments: list[tuple[str, str]], *, client=None
+                        segments: list[tuple[str, str]], *,
+                        start_segment: int = 0, start_chunk: int = 0, client=None
                         ) -> AsyncGenerator[dict, None]:
-    """segments = liste de (text, source_file). Un seul segment pour text/url ;
-    N pour un zip. resolver/deduper partagés -> dedup et fusion d'entités
-    traversent tous les fichiers (résolution intra-document)."""
+    """segments = liste de (text, source_file). À la reprise (start_* > 0), le
+    deduper/resolver sont pré-chargés depuis la DB et les chunks déjà traités
+    (< (start_segment, start_chunk)) sont sautés."""
     owns_client = client is None
     client = client or httpx.AsyncClient(timeout=None)
 
@@ -24,9 +25,14 @@ async def run_extraction(cfg: Config, store: Store, doc_id: int,
 
     resolver = EntityResolver(store, doc_id, embed_one, cfg.entity_threshold)
     deduper = FactDeduper(embed_one, cfg.dedup_threshold, field=cfg.dedup_field)
+    if start_segment > 0 or start_chunk > 0:
+        resolver.preload(store.load_entities(doc_id))
+        deduper.preload(store.load_fact_vectors(doc_id))
     try:
-        for text, source_file in segments:
+        for si, (text, source_file) in enumerate(segments):
             for ci, chunk in enumerate(chunk_text(text)):
+                if (si, ci) < (start_segment, start_chunk):
+                    continue
                 parser = FactStreamParser()
                 msgs = build_messages(chunk)
                 async for delta in stream_chat(
@@ -48,13 +54,14 @@ async def run_extraction(cfg: Config, store: Store, doc_id: int,
                             store.add_fact_vector(fid, vec)
                         yield {"type": "fact", "fact": {**fact, "id": fid},
                                "is_duplicate": is_dup, "source_file": source_file}
-                yield {"type": "round_end", "chunk": ci, "source_file": source_file}
+                yield {"type": "round_end", "segment": si, "chunk": ci,
+                       "source_file": source_file}
         store.finish_document(doc_id)
         doc = store.get_document(doc_id)
         yield {"type": "done", "total_facts": doc["total_facts"],
                "unique_facts": doc["unique_facts"],
                "duplicate_facts": doc["duplicate_facts"]}
-    except Exception as e:  # remonter l'échec sans l'avaler (embeddings KO -> fail loud)
+    except Exception as e:  # fail loud (embeddings KO, etc.)
         store.finish_document(doc_id, error=str(e))
         yield {"type": "error", "message": str(e)}
         raise

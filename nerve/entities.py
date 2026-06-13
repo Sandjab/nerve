@@ -44,6 +44,13 @@ class EntityResolver:
         self._entities: list[tuple[int, list[float], str]] = []  # (id, vec, key)
         self._surface: dict[int, Counter] = {}       # entity_id -> Counter(surface forms)
 
+    def preload(self, rows: list[tuple[int, str, str, int, list[float]]]) -> None:
+        """Reconstruit le registre à la reprise : (id, canonical, key, mention, vec)."""
+        for eid, canonical, key, mention, vec in rows:
+            self._by_key[key] = eid
+            self._entities.append((eid, vec, key))
+            self._surface[eid] = Counter({canonical: mention})
+
     def _note(self, eid: int, name: str) -> None:
         self._surface[eid][name] += 1
         # canonique = forme la plus fréquente (égalité -> la plus courte)

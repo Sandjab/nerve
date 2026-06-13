@@ -39,3 +39,7 @@ class FactDeduper:
 
     def add(self, fact_id: int, vec: list[float]) -> None:
         self._retained.append((fact_id, vec))
+
+    def preload(self, items: list[tuple[int, list[float]]]) -> None:
+        """Pré-remplit le working set à la reprise (fact_id, vecteur normalisé)."""
+        self._retained.extend(items)
