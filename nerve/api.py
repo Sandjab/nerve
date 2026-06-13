@@ -94,6 +94,32 @@ def resume_document(doc_id: int):
         raise HTTPException(status_code=404, detail="Document introuvable")
     return scheduler.resume(doc_id)
 
+@app.get("/api/documents/{doc_id}/events")
+async def document_events(doc_id: int):
+    if store.get_document(doc_id) is None:
+        raise HTTPException(status_code=404, detail="Document introuvable")
+
+    async def gen():
+        q = scheduler.subscribe(doc_id)
+        try:
+            yield f"data: {json.dumps({'type': 'replay', 'facts': store.get_facts(doc_id)})}\n\n"
+            doc = store.get_document(doc_id)
+            yield f"data: {json.dumps({'type': 'status', 'status': doc['status'], 'total_facts': doc['total_facts'], 'unique_facts': doc['unique_facts'], 'duplicate_facts': doc['duplicate_facts']})}\n\n"
+            if doc["status"] in ("done", "failed"):
+                return
+            while True:
+                try:
+                    ev = await asyncio.wait_for(q.get(), timeout=15)
+                    yield f"data: {json.dumps(ev)}\n\n"
+                    if ev.get("type") in ("done", "error"):
+                        break
+                except asyncio.TimeoutError:
+                    yield ": keepalive\n\n"
+        finally:
+            scheduler.unsubscribe(doc_id, q)
+
+    return StreamingResponse(gen(), media_type="text/event-stream")
+
 @app.get("/api/documents/{doc_id}/facts")
 def get_facts(doc_id: int):
     doc = store.get_document(doc_id)

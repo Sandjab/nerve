@@ -128,3 +128,19 @@ def test_pause_resume_routes(tmp_path, monkeypatch):
     assert client.post(f"/api/documents/{doc_id}/pause").json()["status"] == "paused"
     assert client.post(f"/api/documents/{doc_id}/resume").json()["status"] == "queued"
     assert client.post("/api/documents/9999/pause").status_code == 404
+
+def test_sse_replay_for_done_document(tmp_path, monkeypatch):
+    monkeypatch.setenv("NERVE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("EMBED_DIM", "2")
+    import importlib, nerve.api as api
+    importlib.reload(api)
+    doc_id = api.store.create_document(api.store.create_set("S"), "d", "text")
+    api.store.add_fact(doc_id, {"subject": "A", "predicate": "r", "object": "B"})
+    api.store.finish_document(doc_id)                 # statut done -> le flux se termine seul
+    client = TestClient(api.app)
+    with client.stream("GET", f"/api/documents/{doc_id}/events") as r:
+        body = "".join(r.iter_text())
+    assert '"type": "replay"' in body
+    assert '"type": "status"' in body
+    assert '"A"' in body                              # le fait rejoué est présent
+    assert client.get("/api/documents/9999/events").status_code == 404
