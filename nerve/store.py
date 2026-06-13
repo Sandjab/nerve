@@ -39,7 +39,7 @@ class Store:
         d = os.path.dirname(self.db_path)
         if d:
             os.makedirs(d, exist_ok=True)
-        con = sqlite3.connect(self.db_path)
+        con = sqlite3.connect(self.db_path, check_same_thread=False)
         con.row_factory = sqlite3.Row
         con.enable_load_extension(True)
         sqlite_vec.load(con)
