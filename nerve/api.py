@@ -82,14 +82,14 @@ def get_document(doc_id: int):
     return doc
 
 @app.post("/api/documents/{doc_id}/pause")
-def pause_document(doc_id: int):
+async def pause_document(doc_id: int):
     doc = scheduler.pause(doc_id)
     if doc is None:
         raise HTTPException(status_code=404, detail="Document introuvable")
     return doc
 
 @app.post("/api/documents/{doc_id}/resume")
-def resume_document(doc_id: int):
+async def resume_document(doc_id: int):
     if store.get_document(doc_id) is None:
         raise HTTPException(status_code=404, detail="Document introuvable")
     return scheduler.resume(doc_id)

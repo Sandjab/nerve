@@ -91,3 +91,30 @@ def test_reconcile_reenqueues_interrupted(tmp_path):
     assert sched.queue.qsize() == 1
     assert st.get_document(d1)["status"] == "queued"
     assert st.get_document(d2)["status"] == "done"
+
+async def test_pause_queued_doc_is_not_processed(tmp_path):
+    st = Store(str(tmp_path / "pq.db"), embed_dim=2); st.init_db()
+    doc_id = st.create_document(st.create_set("S"), "d", "text")
+    write_segments(str(tmp_path), doc_id, [("texte", "")])
+    sched = Scheduler(load_config(), st, run=fake_run_done, data_dir=str(tmp_path))
+    sched.enqueue(doc_id)          # queued, dans la file
+    sched.pause(doc_id)            # doc queued -> paused, mais reste dans la file
+    sched.start()
+    await asyncio.wait_for(sched.queue.join(), timeout=2)  # attend le drainage par le worker
+    await sched.stop()
+    assert st.get_document(doc_id)["status"] == "paused"   # NE doit PAS valoir "done"
+
+async def test_worker_marks_failed_when_process_raises(tmp_path):
+    st = Store(str(tmp_path / "wf.db"), embed_dim=2); st.init_db()
+    doc_id = st.create_document(st.create_set("S"), "d", "text")
+    # PAS de write_segments -> load_segments lèvera FileNotFoundError dans _process
+    sched = Scheduler(load_config(), st, data_dir=str(tmp_path))
+    sub = sched.subscribe(doc_id)
+    sched.start(); sched.enqueue(doc_id)
+    await asyncio.wait_for(sched.queue.join(), timeout=2)
+    await sched.stop()
+    assert st.get_document(doc_id)["status"] == "failed"
+    types = []
+    while not sub.empty():
+        types.append(sub.get_nowait().get("type"))
+    assert "error" in types

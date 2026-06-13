@@ -63,8 +63,10 @@ class Scheduler:
                 pass
 
     async def _process(self, doc_id: int) -> None:
-        segments = load_segments(self.data_dir, doc_id)
         doc = self.store.get_document(doc_id)
+        if doc is None or doc["status"] == "paused":
+            return
+        segments = load_segments(self.data_dir, doc_id)
         ps, pc = doc["progress_segment"], doc["progress_chunk"]
         self.store.set_status(doc_id, "running")
         self.emit(doc_id, {"type": "status", "status": "running"})
@@ -86,8 +88,13 @@ class Scheduler:
             doc_id = await self.queue.get()
             try:
                 await self._process(doc_id)
-            except Exception:
-                pass  # le pipeline a déjà émis 'error' et marqué le doc 'failed'
+            except Exception as e:
+                # fail loud : si l'erreur n'a pas déjà été traitée par le pipeline
+                # (qui marque 'failed' + émet 'error'), terminer le doc proprement.
+                doc = self.store.get_document(doc_id)
+                if doc is not None and doc["status"] not in ("done", "failed"):
+                    self.store.finish_document(doc_id, error=str(e))
+                    self.emit(doc_id, {"type": "error", "message": str(e)})
             finally:
                 self.queue.task_done()
 
