@@ -38,9 +38,11 @@ const G=ForceGraph()(document.getElementById("graph"))
 function render(facts){
   const nodes=new Map(), links=[];
   for(const f of facts){
-    if(!f.subject||!f.object) continue;
-    nodes.set(f.subject,{id:f.subject}); nodes.set(f.object,{id:f.object});
-    links.push({source:f.subject,target:f.object,predicate:f.predicate});
+    const s = f.subject_canonical || f.subject;
+    const o = f.object_canonical || f.object;
+    if(!s||!o) continue;
+    nodes.set(s,{id:s}); nodes.set(o,{id:o});
+    links.push({source:s,target:o,predicate:f.predicate});
   }
   G.graphData({nodes:[...nodes.values()],links});
 }
