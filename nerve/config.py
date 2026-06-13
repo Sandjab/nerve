@@ -19,6 +19,9 @@ class Config:
     entity_threshold: float
     dedup_threshold: float
     dedup_field: str
+    url_transcoders: tuple[str, ...]
+    puremd_token: str
+    jina_key: str
 
 def load_config() -> Config:
     data_dir = os.environ.get("NERVE_DATA_DIR", "data")
@@ -41,4 +44,10 @@ def load_config() -> Config:
         entity_threshold=float(os.environ.get("ENTITY_THRESHOLD", "0.75")),
         dedup_threshold=float(os.environ.get("DEDUP_THRESHOLD", "0.85")),
         dedup_field=os.environ.get("DEDUP_FIELD", "triple"),
+        url_transcoders=tuple(
+            s.strip() for s in os.environ.get("URL_TRANSCODERS", "trafilatura").split(",")
+            if s.strip()
+        ),
+        puremd_token=os.environ.get("PUREMD_API_TOKEN", ""),
+        jina_key=os.environ.get("JINA_API_KEY", ""),
     )
