@@ -161,3 +161,19 @@ def test_facts_for_set_enriched_rows(tmp_path):
     assert r0["o_key"] == "abbaye" and r0["predicate"] == "fonde"
     # filtre min_conf
     assert len(st.facts_for_set(s, min_conf=50)) == 1
+
+def test_search_facts_knn_and_set_filter(tmp_path):
+    st = Store(str(tmp_path / "sf.db"), embed_dim=3); st.init_db()
+    sa = st.create_set("A"); sb = st.create_set("B")
+    da = st.create_document(sa, "da", "text"); db = st.create_document(sb, "db", "text")
+    fa = st.add_fact(da, {"subject": "A", "predicate": "r", "object": "B"})
+    st.add_fact_vector(fa, [1.0, 0.0, 0.0])
+    fb = st.add_fact(db, {"subject": "C", "predicate": "r", "object": "D"})
+    st.add_fact_vector(fb, [0.0, 1.0, 0.0])
+    # requête proche de fa
+    res = st.search_facts([1.0, 0.0, 0.0], k=1)
+    assert res[0]["fact_id"] == fa and "distance" in res[0]
+    # filtre set B alors que le + proche est fa (set A) -> on récupère fb (over-fetch)
+    res_b = st.search_facts([1.0, 0.0, 0.0], k=1, sets=[sb])
+    assert [r["fact_id"] for r in res_b] == [fb]
+    assert res_b[0]["set_id"] == sb

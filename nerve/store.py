@@ -243,6 +243,27 @@ class Store:
         sql += " ORDER BY f.id"
         return [dict(r) for r in self.conn.execute(sql, params).fetchall()]
 
+    def search_facts(self, query_vec: list[float], k: int,
+                     sets: list[int] | None = None) -> list[dict]:
+        knn_k = k if not sets else max(k * 10, 100)
+        rows = self.conn.execute(
+            "SELECT v.fact_id AS fact_id, v.distance AS distance, "
+            "f.subject AS subject, f.predicate AS predicate, f.object AS object, "
+            "f.description AS description, f.document_id AS document_id, "
+            "d.set_id AS set_id FROM vec_facts v "
+            "JOIN facts f ON f.id = v.fact_id "
+            "JOIN documents d ON d.id = f.document_id "
+            "WHERE v.embedding MATCH ? AND k = ?",
+            (sqlite_vec.serialize_float32(query_vec), knn_k)).fetchall()
+        out: list[dict] = []
+        for r in rows:
+            if sets and r["set_id"] not in sets:
+                continue
+            out.append(dict(r))
+            if len(out) >= k:
+                break
+        return out
+
     def get_set(self, set_id: int) -> dict | None:
         s = self.conn.execute(
             "SELECT * FROM source_sets WHERE id = ?", (set_id,)).fetchone()
