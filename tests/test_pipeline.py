@@ -59,3 +59,31 @@ async def test_run_extraction_dedups_across_segments(tmp_path, monkeypatch):
     facts = st.get_facts(doc_id)                     # non-dup
     assert len(facts) == 1
     assert facts[0]["source_file"] == "a.txt"        # provenance du 1er segment
+
+def cfg_re():
+    return load_config()
+
+async def test_round_end_carries_segment_chunk(tmp_path, monkeypatch):
+    monkeypatch.setattr(pipe, "stream_chat", fake_stream_one)
+    monkeypatch.setattr(pipe, "embed", fake_embed)
+    st = Store(str(tmp_path / "re.db"), embed_dim=3); st.init_db()
+    doc_id = st.create_document(st.create_set("S"), "d", "file")
+    events = [e async for e in pipe.run_extraction(cfg_re(), st, doc_id, [("x", "a.txt")])]
+    re_events = [e for e in events if e["type"] == "round_end"]
+    assert re_events and re_events[0]["segment"] == 0 and re_events[0]["chunk"] == 0
+    assert re_events[0]["source_file"] == "a.txt"
+
+async def test_resume_skips_segment_and_preloads_dedup(tmp_path, monkeypatch):
+    monkeypatch.setattr(pipe, "stream_chat", fake_stream_one)   # émet "Cluny a_pour Scriptorium"
+    monkeypatch.setattr(pipe, "embed", fake_embed)
+    st = Store(str(tmp_path / "rs.db"), embed_dim=3); st.init_db()
+    doc_id = st.create_document(st.create_set("S"), "d", "file")
+    # passe initiale : seg0 traité -> 1 fait unique + entités + vecteurs en DB
+    [e async for e in pipe.run_extraction(cfg_re(), st, doc_id, [("seg0", "a.txt")])]
+    assert st.get_document(doc_id)["unique_facts"] == 1
+    # reprise : start_segment=1 -> seg0 SAUTÉ ; seg1 ré-émet le même fait -> doublon via preload
+    [e async for e in pipe.run_extraction(cfg_re(), st, doc_id,
+        [("seg0", "a.txt"), ("seg1", "b.txt")], start_segment=1)]
+    doc = st.get_document(doc_id)
+    assert doc["unique_facts"] == 1       # rien de neuf (preload a chargé le fait)
+    assert doc["duplicate_facts"] == 1    # exactement 1 (seg0 sauté, sinon ce serait 2)
