@@ -37,3 +37,31 @@ def test_get_facts_unknown_document_returns_404(tmp_path, monkeypatch):
     importlib.reload(api)
     client = TestClient(api.app)
     assert client.get("/api/documents/9999/facts").status_code == 404
+
+async def fake_transcode(cfg, url, *, client=None):
+    return ("# Page\n\ncorps de la page", "Page")
+
+def test_create_document_from_url(tmp_path, monkeypatch):
+    monkeypatch.setenv("NERVE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("EMBED_DIM", "2")
+    monkeypatch.setattr(pipe, "stream_chat", fake_stream)
+    monkeypatch.setattr(pipe, "embed", fake_embed)
+    import importlib, nerve.api as api
+    importlib.reload(api)
+    monkeypatch.setattr(api, "transcode_url", fake_transcode)
+    client = TestClient(api.app)
+    r = client.post("/api/documents", json={"url": "https://ex.com/a"})
+    assert r.status_code == 200
+    doc_id = r.json()["document_id"]
+    doc = client.get(f"/api/documents/{doc_id}/facts").json()["document"]
+    assert doc["source_kind"] == "url"
+    assert doc["source_ref"] == "https://ex.com/a"
+    assert doc["title"] == "Page"                       # titre transcodé (body.title défaut)
+    assert "dedup_field" in doc["params_json"]          # M-2 corrigé
+
+def test_create_document_requires_text_or_url(tmp_path, monkeypatch):
+    monkeypatch.setenv("NERVE_DATA_DIR", str(tmp_path))
+    import importlib, nerve.api as api
+    importlib.reload(api)
+    client = TestClient(api.app)
+    assert client.post("/api/documents", json={}).status_code == 400
