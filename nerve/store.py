@@ -222,6 +222,27 @@ class Store:
             "GROUP BY s.id, s.name, s.description ORDER BY s.id").fetchall()
         return [dict(r) for r in rows]
 
+    _GRAPH_COLS = (
+        "f.id AS fact_id, f.predicate AS predicate, f.confidence AS confidence, "
+        "f.document_id AS document_id, "
+        "se.normalized_key AS s_key, se.canonical_name AS s_name, "
+        "se.mention_count AS s_mentions, "
+        "oe.normalized_key AS o_key, oe.canonical_name AS o_name, "
+        "oe.mention_count AS o_mentions")
+
+    def facts_for_set(self, set_id: int, min_conf: int | None = None) -> list[dict]:
+        sql = ("SELECT " + self._GRAPH_COLS + " FROM facts f "
+               "JOIN documents d ON d.id = f.document_id "
+               "JOIN entities se ON se.id = f.subject_entity_id "
+               "JOIN entities oe ON oe.id = f.object_entity_id "
+               "WHERE d.set_id = ? AND f.is_duplicate = 0")
+        params: list = [set_id]
+        if min_conf is not None:
+            sql += " AND f.confidence >= ?"
+            params.append(min_conf)
+        sql += " ORDER BY f.id"
+        return [dict(r) for r in self.conn.execute(sql, params).fetchall()]
+
     def get_set(self, set_id: int) -> dict | None:
         s = self.conn.execute(
             "SELECT * FROM source_sets WHERE id = ?", (set_id,)).fetchone()

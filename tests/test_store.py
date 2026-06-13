@@ -140,3 +140,24 @@ def test_get_set_with_documents(tmp_path):
     assert out["name"] == "S"
     assert [doc["id"] for doc in out["documents"]] == [d]
     assert st.get_set(9999) is None
+
+def _seed_fact(st, doc_id, s_name, s_key, pred, o_name, o_key, conf=80):
+    se = st.create_entity(doc_id, s_name, s_key)
+    oe = st.create_entity(doc_id, o_name, o_key)
+    return st.add_fact(doc_id, {"subject": s_name, "predicate": pred,
+                                "object": o_name, "confidence": conf},
+                       subject_entity_id=se, object_entity_id=oe)
+
+def test_facts_for_set_enriched_rows(tmp_path):
+    st = Store(str(tmp_path / "ffs.db"), embed_dim=3); st.init_db()
+    s = st.create_set("S")
+    d = st.create_document(s, "doc", "text")
+    _seed_fact(st, d, "Cluny", "cluny", "fonde", "Abbaye", "abbaye", conf=90)
+    _seed_fact(st, d, "Cluny", "cluny", "situe", "Bourgogne", "bourgogne", conf=40)
+    rows = st.facts_for_set(s)
+    assert len(rows) == 2
+    r0 = rows[0]
+    assert r0["s_key"] == "cluny" and r0["s_name"] == "Cluny"
+    assert r0["o_key"] == "abbaye" and r0["predicate"] == "fonde"
+    # filtre min_conf
+    assert len(st.facts_for_set(s, min_conf=50)) == 1
