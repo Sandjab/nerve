@@ -191,3 +191,21 @@ def test_sets_list_and_detail(tmp_path, monkeypatch):
     detail = client.get(f"/api/sets/{s}").json()
     assert detail["name"] == "S" and len(detail["documents"]) == 1
     assert client.get("/api/sets/9999").status_code == 404
+
+def test_search_endpoint(tmp_path, monkeypatch):
+    monkeypatch.setenv("NERVE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("EMBED_DIM", "3")
+    import importlib, nerve.api as api
+    importlib.reload(api)
+    s = api.store.create_set("S"); d = api.store.create_document(s, "d", "text")
+    fa = api.store.add_fact(d, {"subject": "Cluny", "predicate": "r", "object": "Abbaye"})
+    api.store.add_fact_vector(fa, [1.0, 0.0, 0.0])
+    fb = api.store.add_fact(d, {"subject": "X", "predicate": "r", "object": "Y"})
+    api.store.add_fact_vector(fb, [0.0, 1.0, 0.0])
+    async def fake_embed(cfg, texts, *, client=None):
+        return [[1.0, 0.0, 0.0]]
+    monkeypatch.setattr(api, "embed", fake_embed)
+    client = TestClient(api.app)
+    res = client.get("/api/search?q=cluny&k=1").json()
+    assert res["results"][0]["fact_id"] == fa
+    assert client.get("/api/search?q=").status_code == 400

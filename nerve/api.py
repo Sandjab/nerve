@@ -151,6 +151,13 @@ def set_graph(set_id: int, min_conf: int | None = None):
         raise HTTPException(status_code=404, detail="Set introuvable")
     return build_graph(store.facts_for_set(set_id, min_conf))
 
+@app.get("/api/search")
+async def search(q: str, sets: list[int] | None = Query(None), k: int = 20):
+    if not q.strip():
+        raise HTTPException(status_code=400, detail="q requis")
+    vec = (await embed(cfg.embed, [q]))[0]
+    return {"results": store.search_facts(vec, k, sets)}
+
 @app.get("/")
 def index():
     return FileResponse(os.path.join(WEB, "index.html"))
