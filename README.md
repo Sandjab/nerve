@@ -29,10 +29,11 @@ machine : aucun service tiers obligatoire, vos données ne quittent pas le poste
 - **[`uv`](https://docs.astral.sh/uv/)** (gestion d'environnement et d'exécution Python ≥ 3.11).
 - Un **fournisseur LLM + embeddings** exposant une API **compatible OpenAI**. Par défaut, `nerve`
   s'attend à un **[Ollama](https://ollama.com/)** local servant :
-  - un modèle d'extraction (défaut `qwen3.6`) ;
+  - un modèle d'extraction (défaut `mistral-small3.2:24b-instruct-2506-q8_0`) ;
   - un modèle d'embeddings (défaut `bge-m3`, 1024 dimensions).
 
-  Tirez-les au préalable (p. ex. `ollama pull qwen3` / `ollama pull bge-m3`), ou pointez `nerve`
+  Tirez-les au préalable (p. ex. `ollama pull mistral-small3.2:24b-instruct-2506-q8_0` /
+  `ollama pull bge-m3`), ou pointez `nerve`
   vers un autre fournisseur via les variables d'environnement ci-dessous.
 
 > 💡 **Quel modèle d'extraction choisir ?** Un comparatif **mesuré** de plusieurs modèles Ollama
@@ -62,7 +63,7 @@ Tout se configure par variables d'environnement (valeurs par défaut entre paren
 | --- | --- | --- |
 | `LLM_BASE_URL` | endpoint LLM (compatible OpenAI) | `http://localhost:11434/v1` |
 | `LLM_API_KEY` | clé du fournisseur LLM | `ollama` |
-| `LLM_MODEL` | modèle d'extraction | `qwen3.6` |
+| `LLM_MODEL` | modèle d'extraction | `mistral-small3.2:24b-instruct-2506-q8_0` |
 | `EMBED_BASE_URL` | endpoint embeddings | `http://localhost:11434/v1` |
 | `EMBED_API_KEY` | clé du fournisseur embeddings | `ollama` |
 | `EMBED_MODEL` | modèle d'embeddings | `bge-m3` |

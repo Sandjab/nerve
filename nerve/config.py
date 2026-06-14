@@ -28,7 +28,7 @@ def load_config() -> Config:
     llm = ProviderConfig(
         base_url=os.environ.get("LLM_BASE_URL", "http://localhost:11434/v1"),
         api_key=os.environ.get("LLM_API_KEY", "ollama"),
-        model=os.environ.get("LLM_MODEL", "qwen3.6"),
+        model=os.environ.get("LLM_MODEL", "mistral-small3.2:24b-instruct-2506-q8_0"),
     )
     embed = ProviderConfig(
         base_url=os.environ.get("EMBED_BASE_URL", "http://localhost:11434/v1"),

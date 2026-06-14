@@ -297,8 +297,11 @@ def test_create_document_without_model_omits_key(tmp_path, monkeypatch):
 def test_models_endpoint_normalises_latest_tag(tmp_path, monkeypatch):
     # Ollama renvoie les ids avec ':latest' alors que la config est sans tag :
     # l'embed doit être exclu malgré le tag, et le défaut doit pointer sur l'id réel.
+    # On épingle un LLM_MODEL SANS tag : c'est ce cas (bare -> ':latest') que la
+    # normalisation gère ; le défaut de prod, lui, porte désormais un tag explicite.
     monkeypatch.setenv("NERVE_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("EMBED_DIM", "2")
+    monkeypatch.setenv("LLM_MODEL", "qwen3.6")
     import importlib, nerve.api as api
     importlib.reload(api)
     async def fake_list(cfg, *, client=None):
@@ -308,4 +311,21 @@ def test_models_endpoint_normalises_latest_tag(tmp_path, monkeypatch):
     res = client.get("/api/models").json()
     assert f"{api.cfg.embed.model}:latest" not in res["models"]      # embed exclu malgré ':latest'
     assert res["default"] == f"{api.cfg.llm.model}:latest"           # défaut = id réel de la liste
-    assert f"{api.cfg.llm.model}:latest" in res["models"]
+    assert f"{api.cfg.llm.model}:latest" in res["models"]            # le llm, lui, reste dans la liste
+
+def test_models_endpoint_garde_le_tag_du_defaut(tmp_path, monkeypatch):
+    # Un défaut PORTANT déjà un tag (cas du défaut de prod mistral-...-q8_0, qui contient
+    # un ':') doit ressortir tel quel : Ollama le liste exactement, rien à recoller. Protège
+    # contre une régression de norm() qui casserait le défaut taggé dans la dropdown.
+    monkeypatch.setenv("NERVE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("EMBED_DIM", "2")
+    monkeypatch.setenv("LLM_MODEL", "mistral-small3.2:24b-instruct-2506-q8_0")
+    import importlib, nerve.api as api
+    importlib.reload(api)
+    async def fake_list(cfg, *, client=None):
+        return ["bge-m3:latest", "mistral-small3.2:24b-instruct-2506-q8_0", "gemma4:latest"]
+    monkeypatch.setattr(api, "list_models", fake_list)
+    client = TestClient(api.app)
+    res = client.get("/api/models").json()
+    assert res["default"] == "mistral-small3.2:24b-instruct-2506-q8_0"
+    assert "mistral-small3.2:24b-instruct-2506-q8_0" in res["models"]

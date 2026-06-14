@@ -7,7 +7,7 @@ def test_defaults(monkeypatch):
         monkeypatch.delenv(k, raising=False)
     c = cfgmod.load_config()
     assert c.llm.base_url == "http://localhost:11434/v1"
-    assert c.llm.model == "qwen3.6"
+    assert c.llm.model == "mistral-small3.2:24b-instruct-2506-q8_0"
     assert c.embed.model == "bge-m3"
     assert c.embed_dim == 1024
     assert c.db_path.endswith("nerve.db")
