@@ -13,6 +13,8 @@ html,body{margin:0;height:100%;background:var(--paper);color:var(--ink);
 #top{display:flex;gap:8px;padding:10px;background:var(--blue-deep)}
 #top textarea{flex:1;height:46px;border-radius:6px;border:1px solid var(--line);padding:8px;font-family:inherit}
 #top button{background:var(--blue-bright);color:#fff;border:0;border-radius:6px;padding:0 16px;cursor:pointer}
+#top #llmModel{height:46px;border-radius:6px;border:1px solid var(--line);padding:0 8px;
+  background:var(--card);color:var(--ink);font-family:inherit;max-width:190px;cursor:pointer}
 #graph{position:absolute;left:260px;right:0;bottom:0;top:66px}
 #side{position:absolute;left:0;top:66px;bottom:0;width:260px;overflow:auto;
   background:var(--card);border-right:1px solid var(--line);padding:10px;font-size:13px}

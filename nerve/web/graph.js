@@ -256,7 +256,8 @@ document.getElementById("go").addEventListener("click", async () => {
   try {
     ({document_id} = await getJSON("/api/documents", {method:"POST",
       headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({title:"Coller", text})}));
+      body:JSON.stringify({title:"Coller", text,
+        model: document.getElementById("llmModel").value || undefined})}));
   } catch(err) {
     showError("Extraction impossible : " + err.message);
     return;
@@ -291,6 +292,28 @@ async function loadSets(){
     box.appendChild(el);
   });
 }
+async function loadModels(){
+  const sel = document.getElementById("llmModel");
+  const saved = localStorage.getItem("nerve-llm-model");
+  try {
+    const {models, default: def} = await getJSON("/api/models");
+    sel.replaceChildren(...models.map(m => {
+      const o = document.createElement("option"); o.value = m; o.textContent = m; return o;
+    }));
+    sel.value = (saved && models.includes(saved)) ? saved : def;
+  } catch(err) {
+    showError("Modèles indisponibles : " + err.message);   // fail-loud, sans masquer
+    if(saved){                                              // repli : dernier choix connu
+      const o = document.createElement("option"); o.value = saved; o.textContent = saved;
+      sel.replaceChildren(o); sel.value = saved;
+    }
+    // sinon select vide -> POST sans model -> le backend retombe sur LLM_MODEL
+  }
+}
+document.getElementById("llmModel").addEventListener("change", (e) => {
+  localStorage.setItem("nerve-llm-model", e.target.value);
+});
+
 async function openSet(id, el){
   closeActiveES();
   let detail;
@@ -366,3 +389,4 @@ document.getElementById("themeBtn").addEventListener("click", (e) => {
 document.getElementById("themeBtn").textContent = theme === "light" ? "☾" : "☀";
 applyStyles();
 loadSets();
+loadModels();
