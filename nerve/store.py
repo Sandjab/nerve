@@ -232,11 +232,11 @@ class Store:
 
     _GRAPH_COLS = (
         "f.id AS fact_id, f.predicate AS predicate, f.confidence AS confidence, "
-        "f.document_id AS document_id, "
+        "f.document_id AS document_id, d.set_id AS set_id, "
         "se.normalized_key AS s_key, se.canonical_name AS s_name, "
-        "se.mention_count AS s_mentions, "
+        "se.mention_count AS s_mentions, se.kind AS s_kind, "
         "oe.normalized_key AS o_key, oe.canonical_name AS o_name, "
-        "oe.mention_count AS o_mentions")
+        "oe.mention_count AS o_mentions, oe.kind AS o_kind")
 
     def facts_for_set(self, set_id: int, min_conf: int | None = None) -> list[dict]:
         sql = ("SELECT " + self._GRAPH_COLS + " FROM facts f "
@@ -310,6 +310,7 @@ class Store:
             return []
         ph = ",".join("?" * len(entity_ids))
         sql = ("SELECT " + self._GRAPH_COLS + " FROM facts f "
+               "JOIN documents d ON d.id = f.document_id "
                "JOIN entities se ON se.id = f.subject_entity_id "
                "JOIN entities oe ON oe.id = f.object_entity_id "
                "WHERE f.is_duplicate = 0 AND "
