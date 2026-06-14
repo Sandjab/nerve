@@ -45,3 +45,23 @@ async def stream_chat(
     finally:
         if owns:
             await client.aclose()
+
+async def list_models(
+    cfg: ProviderConfig,
+    *,
+    client: httpx.AsyncClient | None = None,
+) -> list[str]:
+    """Liste les ids de modèles d'un endpoint /models OpenAI-compatible
+    (Ollama, OpenRouter, OpenAI...). Fail-loud : lève sur statut non-2xx."""
+    headers = {"Authorization": f"Bearer {cfg.api_key}"}
+    url = f"{cfg.base_url.rstrip('/')}/models"
+    owns = client is None
+    client = client or httpx.AsyncClient(timeout=30)
+    try:
+        resp = await client.get(url, headers=headers)
+        resp.raise_for_status()
+        data = resp.json().get("data") or []
+        return [m["id"] for m in data if m.get("id")]
+    finally:
+        if owns:
+            await client.aclose()

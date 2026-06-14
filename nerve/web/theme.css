@@ -24,6 +24,8 @@ html,body{margin:0;height:100%;background:var(--paper);color:var(--ink);font-fam
   font-family:inherit;font-size:14px;background:var(--card);color:var(--ink)}
 #top button{background:var(--accent);color:#fff;border:0;border-radius:var(--rad);padding:0 18px;cursor:pointer;
   font-family:inherit;font-size:14px;font-weight:600}
+#top #llmModel{height:46px;border-radius:var(--rad);border:1px solid var(--line);padding:0 8px;
+  background:var(--card);color:var(--ink);font-family:inherit;max-width:190px;cursor:pointer}
 #graph{position:absolute;left:260px;right:0;bottom:0;top:66px}
 
 /* barre latérale — chrome discrète : elle s'efface sur le papier, le graphe est la vedette */

@@ -14,6 +14,7 @@ from nerve.ingest import ingest_upload, IngestError
 from nerve.graph import build_graph
 from nerve.entities import normalized_key
 from nerve.embeddings import embed
+from nerve.llm import list_models
 
 cfg = load_config()
 store = Store(cfg.db_path, embed_dim=cfg.embed_dim)
@@ -36,10 +37,14 @@ class CreateDoc(BaseModel):
     url: str | None = None
     set_id: int | None = None
     set_name: str = "Défaut"
+    model: str | None = None
 
 @app.post("/api/documents")
 async def create_document(body: CreateDoc):
     set_id = body.set_id or store.create_set(body.set_name)
+    params = {"dedup_field": cfg.dedup_field}
+    if body.model:
+        params["model"] = body.model
     if body.url:
         try:
             md, transcoded_title = await transcode_url(cfg, body.url)
@@ -47,17 +52,30 @@ async def create_document(body: CreateDoc):
             raise HTTPException(status_code=422, detail=str(e))
         title = body.title if body.title != "Sans titre" else (transcoded_title or body.url)
         doc_id = store.create_document(set_id, title, "url", source_ref=body.url,
-                                       params={"dedup_field": cfg.dedup_field})
+                                       params=params)
         segments = [(md, "")]
     elif body.text:
-        doc_id = store.create_document(set_id, body.title, "text",
-                                       params={"dedup_field": cfg.dedup_field})
+        doc_id = store.create_document(set_id, body.title, "text", params=params)
         segments = [(body.text, "")]
     else:
         raise HTTPException(status_code=400, detail="text ou url requis")
     write_segments(cfg.data_dir, doc_id, segments)
     scheduler.enqueue(doc_id)
     return {"document_id": doc_id, "status": "queued"}
+
+@app.get("/api/models")
+async def list_llm_models():
+    try:
+        models = await list_models(cfg.llm)
+    except Exception as e:                       # fail-loud : détail brut ; le front préfixe le contexte
+        raise HTTPException(status_code=502, detail=str(e))
+    def norm(m):                                  # Ollama : absence de tag ≡ ':latest'
+        return m if ":" in m else f"{m}:latest"
+    embed_norm = norm(cfg.embed.model)              # éviter de masquer la fonction embed importée
+    models = [m for m in models if norm(m) != embed_norm]
+    want = norm(cfg.llm.model)                    # défaut = id réel correspondant au modèle configuré
+    default = next((m for m in models if norm(m) == want), cfg.llm.model)
+    return {"models": models, "default": default}
 
 @app.post("/api/documents/upload")
 async def upload_document(file: UploadFile = File(...), set_id: int | None = Form(None),
