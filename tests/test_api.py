@@ -246,3 +246,28 @@ def test_static_assets_served(tmp_path, monkeypatch):
     assert js.status_code == 200 and "javascript" in js.headers["content-type"]
     css = client.get("/theme.css")
     assert css.status_code == 200 and "css" in css.headers["content-type"]
+
+def test_models_endpoint_excludes_embed(tmp_path, monkeypatch):
+    monkeypatch.setenv("NERVE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("EMBED_DIM", "2")
+    import importlib, nerve.api as api
+    importlib.reload(api)
+    async def fake_list(cfg, *, client=None):
+        return ["qwen3.6", api.cfg.embed.model, "gemma4"]
+    monkeypatch.setattr(api, "list_models", fake_list)
+    client = TestClient(api.app)
+    res = client.get("/api/models").json()
+    assert api.cfg.embed.model not in res["models"]
+    assert res["default"] == api.cfg.llm.model
+    assert "qwen3.6" in res["models"] and "gemma4" in res["models"]
+
+def test_models_endpoint_provider_down_502(tmp_path, monkeypatch):
+    monkeypatch.setenv("NERVE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("EMBED_DIM", "2")
+    import importlib, nerve.api as api
+    importlib.reload(api)
+    async def boom(cfg, *, client=None):
+        raise RuntimeError("provider down")
+    monkeypatch.setattr(api, "list_models", boom)
+    client = TestClient(api.app)
+    assert client.get("/api/models").status_code == 502

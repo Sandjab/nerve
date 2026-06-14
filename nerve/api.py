@@ -14,6 +14,7 @@ from nerve.ingest import ingest_upload, IngestError
 from nerve.graph import build_graph
 from nerve.entities import normalized_key
 from nerve.embeddings import embed
+from nerve.llm import list_models
 
 cfg = load_config()
 store = Store(cfg.db_path, embed_dim=cfg.embed_dim)
@@ -58,6 +59,15 @@ async def create_document(body: CreateDoc):
     write_segments(cfg.data_dir, doc_id, segments)
     scheduler.enqueue(doc_id)
     return {"document_id": doc_id, "status": "queued"}
+
+@app.get("/api/models")
+async def list_llm_models():
+    try:
+        models = await list_models(cfg.llm)
+    except Exception as e:                       # fail-loud, message exploitable côté UI
+        raise HTTPException(status_code=502, detail=f"Modèles indisponibles : {e}")
+    return {"models": [m for m in models if m != cfg.embed.model],
+            "default": cfg.llm.model}
 
 @app.post("/api/documents/upload")
 async def upload_document(file: UploadFile = File(...), set_id: int | None = Form(None),
