@@ -13,12 +13,38 @@ const THEMES = {
 let theme = localStorage.getItem("nerve-theme") || "light";
 document.documentElement.setAttribute("data-theme", theme);
 const T = () => THEMES[theme];
+// police UI « instrument » pour les labels dessinés sur le canvas (miroir de --ui dans theme.css)
+const UI_FONT = '"Avenir Next","Avenir","Helvetica Neue",system-ui,sans-serif';
+
+// palette des catégories : « Défaut » (scriptorium) ou « Daltonien-safe » (Okabe-Ito, encodage purement teinte).
+// Choix persistant ; cc() renvoie les couleurs de catégorie actives (T() conserve bg/link/text).
+const CB = {comm:["#0072B2","#009E73","#E69F00","#CC79A7","#56B4E9","#F0E442"],
+            bridge:"#D55E00", node:"#0072B2", value:"#8A8A8A"};
+let palette = localStorage.getItem("nerve-palette") || "default";
+const cc = () => palette === "cb" ? CB : T();
+
+// indicateur d'extraction : bouton désactivé pendant le flux + confirmation de fin
+const goBtn = document.getElementById("go");
+const statusBox = document.getElementById("status");
+let statusTimer = null, extracting = false;
+function setStatus(msg, kind){     // kind : "live" | "done" | null (= cacher)
+  if(!msg){ statusBox.style.display = "none"; return; }
+  statusBox.textContent = msg; statusBox.className = kind || "";
+  statusBox.style.display = "block";
+  clearTimeout(statusTimer);
+  if(kind === "done") statusTimer = setTimeout(() => { statusBox.style.display = "none"; }, 5000);
+}
+function setExtracting(on){
+  extracting = on;                 // l'état vide ne doit pas réapparaître pendant l'extraction
+  goBtn.disabled = on; goBtn.textContent = on ? "Extraction…" : "Extraire";
+  updateEmptyState();
+}
 
 let colorMode = "community", sizeMode = "centrality", showEdgeLabels = false;
 let pathKeys = new Set();   // arêtes "srctgt" surlignées (chemin le plus long)
 let activeES = null;        // connexion SSE d'extraction en cours
 let esGen = 0;              // jeton de génération : invalide une extraction supplantée par une autre
-const closeActiveES = () => { if(activeES){ activeES.close(); activeES = null; } };
+const closeActiveES = () => { if(activeES){ activeES.close(); activeES = null; } setExtracting(false); };
 
 // ---- bannière d'erreur (fail-loud côté UI) ----
 const errorBox = document.createElement("div");
@@ -56,14 +82,14 @@ const linkKey = (l) => (l.source.id||l.source) + "\u0001" + (l.target.id||l.targ
 // ---- couleur / taille / arêtes ----
 function nodeColor(n){
   if(pathKeys.size && n._inPath) return "#D6A84E";
-  if(colorMode === "uniform") return T().node;
-  if(colorMode === "type") return n.kind === "value" ? T().value : T().node;
+  if(colorMode === "uniform") return cc().node;
+  if(colorMode === "type") return n.kind === "value" ? cc().value : cc().node;
   if(colorMode === "set"){
     const s = n.sets || [];
-    if(s.length > 1) return T().bridge;          // hub multi-sets
-    return s.length ? T().comm[s[0] % T().comm.length] : T().node;
+    if(s.length > 1) return cc().bridge;          // hub multi-sets
+    return s.length ? cc().comm[s[0] % cc().comm.length] : cc().node;
   }
-  return T().comm[(n.community || 0) % T().comm.length];   // community
+  return cc().comm[(n.community || 0) % cc().comm.length];   // community
 }
 function nodeVal(n){
   if(sizeMode === "fixed") return 1;
@@ -72,7 +98,7 @@ function nodeVal(n){
 }
 function linkColor(l){
   if(pathKeys.has(linkKey(l))) return "#D6A84E";
-  return l.is_bridge ? T().bridge : T().link;
+  return l.is_bridge ? cc().bridge : T().link;
 }
 function linkWidth(l){
   if(pathKeys.has(linkKey(l))) return 4;
@@ -85,7 +111,7 @@ function drawEdgeLabel(link, ctx, scale){
   if(typeof s !== "object" || typeof t !== "object") return;
   const x = (s.x + t.x) / 2, y = (s.y + t.y) / 2;
   const f = 10 / scale;
-  ctx.font = `${f}px -apple-system,system-ui,sans-serif`;
+  ctx.font = `${f}px ${UI_FONT}`;
   ctx.fillStyle = T().text;
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
   ctx.fillText(link.predicate, x, y);
@@ -97,8 +123,8 @@ function drawNodeLabel(node, ctx, scale){
   const label = node.label || node.id;
   if(!label) return;
   const r = Math.sqrt(Math.max(0, nodeVal(node))) * 4;   // rayon ≈ nodeRelSize par défaut
-  const f = 11 / scale;
-  ctx.font = `${f}px -apple-system,system-ui,sans-serif`;
+  const f = 12 / scale;
+  ctx.font = `${f}px ${UI_FONT}`;
   ctx.fillStyle = T().text;
   ctx.textAlign = "center"; ctx.textBaseline = "top";
   ctx.fillText(label, node.x, node.y + r + 2 / scale);
@@ -176,6 +202,7 @@ function renderGraph(data){
     ? longestPath(d) : new Set();
   G.graphData(d);
   applyStyles();
+  updateEmptyState();
 }
 
 // ---- légende dynamique selon le mode de couleur ----
@@ -192,22 +219,22 @@ function renderLegend(){
   const data = G.graphData();
   if(colorMode === "type"){
     title.textContent = "Type"; box.appendChild(title);
-    box.appendChild(legendRow(T().node, "entité"));
-    box.appendChild(legendRow(T().value, "valeur"));
+    box.appendChild(legendRow(cc().node, "entité"));
+    box.appendChild(legendRow(cc().value, "valeur"));
   }else if(colorMode === "set"){
     title.textContent = "Sets"; box.appendChild(title);
     const sets = [...new Set(data.nodes.flatMap(n => n.sets || []))].sort((a,b)=>a-b);
-    sets.forEach(s => box.appendChild(legendRow(T().comm[s % T().comm.length], "set " + s)));
-    box.appendChild(legendRow(T().bridge, "hub multi-sets", true));
+    sets.forEach(s => box.appendChild(legendRow(cc().comm[s % cc().comm.length], "set " + s)));
+    box.appendChild(legendRow(cc().bridge, "hub multi-sets", true));
   }else if(colorMode === "community"){
     title.textContent = "Communautés"; box.appendChild(title);
     const comms = [...new Set(data.nodes.map(n => n.community || 0))].sort((a,b)=>a-b);
-    comms.forEach(c => box.appendChild(legendRow(T().comm[c % T().comm.length], "communauté " + c)));
+    comms.forEach(c => box.appendChild(legendRow(cc().comm[c % cc().comm.length], "communauté " + c)));
   }else{
     title.textContent = "Uniforme"; box.appendChild(title);
-    box.appendChild(legendRow(T().node, "nœud"));
+    box.appendChild(legendRow(cc().node, "nœud"));
   }
-  box.appendChild(legendRow(T().bridge, "passerelle inter-sources", true));
+  box.appendChild(legendRow(cc().bridge, "passerelle inter-sources", true));
 }
 
 // ---- carte de fait au survol d'une arête ----
@@ -221,9 +248,10 @@ G.onLinkHover(link => {
   const ob = document.createElement("b"); ob.textContent = (link.target.label || link.target.id || "");
   triple.append(sb, pr, ob);
   const meta = document.createElement("div"); meta.className = "meta";
-  const c = document.createElement("span");
-  c.textContent = "conf " + (link.confidence == null ? "–" : link.confidence + "%");
-  meta.appendChild(c);
+  const c = document.createElement("span"); c.append("conf ");
+  const cv = document.createElement("span"); cv.className = "measure";   // mesure en mono
+  cv.textContent = link.confidence == null ? "–" : link.confidence + "%";
+  c.appendChild(cv); meta.appendChild(c);
   card.append(triple, meta); card.style.display = "block";
 });
 document.getElementById("graph").addEventListener("mousemove", e => {
@@ -245,12 +273,26 @@ function addFact(f){
   linkKeys.add(k);
   links.push({source:s, target:o, predicate:f.predicate});
 }
-function redraw(){ G.graphData({nodes:[...nodes.values()], links}); applyStyles(); }
+function redraw(){ G.graphData({nodes:[...nodes.values()], links}); applyStyles(); updateEmptyState(); }
+
+// état vide : appel à l'action central tant qu'aucun graphe n'est affiché (premier lancement compris)
+function updateEmptyState(){
+  const n = G.graphData().nodes;
+  document.getElementById("emptyState").style.display = (extracting || (n && n.length)) ? "none" : "flex";
+}
+// centre le graphe sur un nœud (résultats de recherche cliquables) ; renvoie false si absent du graphe courant
+function focusNode(name){
+  const node = G.graphData().nodes.find(n => n.id === name || n.label === name);
+  if(!node || node.x == null) return false;
+  G.centerAt(node.x, node.y, 600); G.zoom(4, 600);
+  return true;
+}
 
 document.getElementById("go").addEventListener("click", async () => {
   const text = document.getElementById("txt").value.trim(); if(!text) return;
   closeActiveES();
   nodes = new Map(); links = []; linkKeys = new Set(); pathKeys = new Set(); redraw();
+  setExtracting(true); setStatus("Extraction…", "live");   // retour immédiat dès le clic
   const gen = ++esGen;
   let document_id;
   try {
@@ -259,24 +301,38 @@ document.getElementById("go").addEventListener("click", async () => {
       body:JSON.stringify({title:"Coller", text,
         model: document.getElementById("llmModel").value || undefined})}));
   } catch(err) {
-    showError("Extraction impossible : " + err.message);
+    if(gen === esGen){          // ne pas réinitialiser l'UI d'une extraction plus récente
+      setExtracting(false); setStatus(null);
+      showError("Extraction impossible : " + err.message);
+    }
     return;
   }
   if(gen !== esGen) return;          // un autre « Extraire » a pris la main entre-temps
   const es = new EventSource(`/api/documents/${document_id}/events`);
   activeES = es;
   es.onmessage = (e) => {
+    if(activeES !== es) return;   // ignorer les messages d'un flux supplanté
     let m;
     try { m = JSON.parse(e.data); } catch(err) { console.warn("frame SSE invalide:", e.data); return; }
-    if(m.type === "replay"){ m.facts.forEach(addFact); redraw(); }
-    else if(m.type === "fact" && !m.is_duplicate){ addFact(m.fact); redraw(); }
+    if(m.type === "replay"){ m.facts.forEach(addFact); redraw(); setStatus(`Extraction… ${links.length} faits`, "live"); }
+    else if(m.type === "fact" && !m.is_duplicate){ addFact(m.fact); redraw(); setStatus(`Extraction… ${links.length} faits`, "live"); }
     else if(m.type === "done" || m.type === "error"){
       es.close(); if(activeES === es) activeES = null;
-      if(m.type === "done"){ analyze({nodes:[...nodes.values()], links}); redraw(); }  // communautés/centralité sur le graphe extrait
-      else showError("Extraction échouée : " + (m.message || ""));
+      setExtracting(false);
+      if(m.type === "done"){
+        analyze({nodes:[...nodes.values()], links}); redraw();   // communautés/centralité sur le graphe extrait
+        setStatus(`${links.length} faits extraits`, "done");
+      }else{ setStatus(null); showError("Extraction échouée : " + (m.message || "")); }
     }
   };
-  es.onerror = () => { es.close(); if(activeES === es) activeES = null; };
+  es.onerror = () => {           // n'agir que pour le flux courant ; signaler l'interruption (fail-loud)
+    es.close();
+    if(activeES === es){
+      activeES = null;
+      setExtracting(false); setStatus(null);
+      showError("Flux d'extraction interrompu.");
+    }
+  };
 });
 
 // ---- navigation sets / docs / recherche / transverse (I-4) ----
@@ -287,7 +343,10 @@ async function loadSets(){
   const box = document.getElementById("sets"); box.replaceChildren();
   sets.forEach(s => {
     const el = document.createElement("div"); el.className = "item";
-    el.textContent = `${s.name} (${s.document_count})`;
+    el.append(s.name + " ");
+    const cnt = document.createElement("span"); cnt.className = "measure";   // compteur en mono
+    cnt.textContent = `(${s.document_count})`;
+    el.appendChild(cnt);
     el.onclick = () => openSet(s.id, el);
     box.appendChild(el);
   });
@@ -352,6 +411,8 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
   (res.results || []).forEach(r => {
     const el = document.createElement("div"); el.className = "r";
     el.textContent = `${r.subject} · ${r.predicate} · ${r.object}`;
+    el.title = "Centrer sur ce nœud";              // affordance identique aux sets
+    el.addEventListener("click", () => { focusNode(r.subject) || focusNode(r.object); });
     box.appendChild(el);
   });
 });
@@ -368,6 +429,9 @@ document.getElementById("colorMode").addEventListener("change", (e) => {
 });
 document.getElementById("sizeMode").addEventListener("change", (e) => {
   sizeMode = e.target.value; applyStyles();
+});
+document.getElementById("paletteMode").addEventListener("change", (e) => {
+  palette = e.target.value; localStorage.setItem("nerve-palette", palette); applyStyles();
 });
 document.getElementById("edgeLabelsBtn").addEventListener("click", (e) => {
   showEdgeLabels = !showEdgeLabels; e.target.classList.toggle("on", showEdgeLabels); applyStyles();
@@ -387,6 +451,8 @@ document.getElementById("themeBtn").addEventListener("click", (e) => {
 });
 
 document.getElementById("themeBtn").textContent = theme === "light" ? "☾" : "☀";
+document.getElementById("paletteMode").value = palette;
 applyStyles();
+updateEmptyState();
 loadSets();
 loadModels();
