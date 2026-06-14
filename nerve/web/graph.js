@@ -1,6 +1,6 @@
 // nerve/web/graph.js — visualisation nerve (rendu force-graph + analytics graphology)
-// NB CDN (à confirmer au smoke) : globals `graphology` (constructeur Graph) et
-// `graphologyLibrary` (communitiesLouvain, etc.) exposés par les UMD chargés dans index.html.
+// Globals fournis par index.html : `graphology` (constructeur Graph, UMD), `ForceGraph` (UMD),
+// `window.graphologyLouvain` (package standalone chargé en ESM ; module asynchrone, d'où la garde).
 
 const THEMES = {
   light: {bg:"#F4F6FA", node:"#23537F", value:"#7A889B", bridge:"#7C2A38",
@@ -84,7 +84,7 @@ function analyze(data){
       const a = l.source.id || l.source, b = l.target.id || l.target;
       if(a !== b && !g.hasEdge(a, b)) g.addEdge(a, b);
     });
-    graphologyLibrary.communitiesLouvain.assign(g);
+    if(window.graphologyLouvain) window.graphologyLouvain.assign(g);
     data.nodes.forEach(n => {
       n.community = g.getNodeAttribute(n.id, "community") || 0;
       n.centrality = g.degree(n.id);
