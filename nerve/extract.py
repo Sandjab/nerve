@@ -18,14 +18,20 @@ FACT_SCHEMA = {
     "required": ["subject", "predicate", "object"],
 }
 
-# Sortie structurée OpenAI-compatible. Support variable selon provider :
-# le parseur ci-dessous reste le filet si le provider ne l'honore pas.
+# Sortie structurée OpenAI-compatible. On exige TOUS les champs (schéma strict) :
+# à schéma lâche (seuls subject/predicate/object requis), les modèles omettent
+# subject_kind/object_kind/evidence_span de façon non déterministe (cf. Benchmark_LLM.md).
+# Support variable selon provider : le parseur ci-dessous reste le filet si non honoré.
 FACT_RESPONSE_FORMAT = {
     "type": "json_schema",
     "json_schema": {
         "name": "facts",
-        "strict": False,
-        "schema": {"type": "array", "items": FACT_SCHEMA},
+        "strict": True,
+        "schema": {"type": "array", "items": {
+            **FACT_SCHEMA,
+            "required": list(FACT_SCHEMA["properties"].keys()),
+            "additionalProperties": False,  # requis par le mode strict d'OpenAI
+        }},
     },
 }
 

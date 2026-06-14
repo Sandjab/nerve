@@ -35,6 +35,11 @@ machine : aucun service tiers obligatoire, vos données ne quittent pas le poste
   Tirez-les au préalable (p. ex. `ollama pull qwen3` / `ollama pull bge-m3`), ou pointez `nerve`
   vers un autre fournisseur via les variables d'environnement ci-dessous.
 
+> 💡 **Quel modèle d'extraction choisir ?** Un comparatif **mesuré** de plusieurs modèles Ollama
+> (fidélité des citations, canonisation des entités, débit) sur Mac Apple Silicon — et la leçon
+> « la config de sortie pèse plus que le modèle » — est documenté dans
+> **[`Benchmark_LLM.md`](Benchmark_LLM.md)**.
+
 ## Démarrage rapide
 
 ```bash

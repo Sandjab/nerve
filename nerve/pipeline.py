@@ -41,7 +41,7 @@ async def run_extraction(cfg: Config, store: Store, doc_id: int,
                 msgs = build_messages(chunk)
                 async for delta in stream_chat(
                     cfg.llm, msgs, client=client,
-                    response_format=FACT_RESPONSE_FORMAT, temperature=0.7,
+                    response_format=FACT_RESPONSE_FORMAT, temperature=0.2,
                 ):
                     for fact in parser.feed(delta):
                         if not fact.get("subject") or not fact.get("object"):

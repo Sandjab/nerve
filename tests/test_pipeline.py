@@ -97,6 +97,22 @@ async def fake_embed_kinds(cfg, texts, **kw):
              "Cluny fonde 910": [0.0, 0.0, 1.0]}
     return [table[t] for t in texts]
 
+async def test_extraction_utilise_temperature_basse(tmp_path, monkeypatch):
+    # Pourquoi : l'extraction veut du déterminisme et de la fidélité (citations verbatim,
+    # noms d'entités identiques) ; à temperature=0.7 la complétude des champs était instable
+    # d'un run à l'autre (mesuré, cf. Benchmark_LLM.md). On vérifie qu'on appelle le LLM en
+    # basse température.
+    captured = {}
+    async def capturing_stream(cfg, messages, **kw):
+        captured.update(kw)
+        yield '[{"subject":"Cluny","predicate":"a_pour","object":"Scriptorium"}]'
+    monkeypatch.setattr(pipe, "stream_chat", capturing_stream)
+    monkeypatch.setattr(pipe, "embed", fake_embed)
+    st = Store(str(tmp_path / "temp.db"), embed_dim=3); st.init_db()
+    doc_id = st.create_document(st.create_set("S"), "d", "text")
+    [e async for e in pipe.run_extraction(load_config(), st, doc_id, [("t", "")])]
+    assert captured["temperature"] == 0.2
+
 async def test_run_extraction_persists_kind(tmp_path, monkeypatch):
     monkeypatch.setattr(pipe, "stream_chat", fake_stream_kinds)
     monkeypatch.setattr(pipe, "embed", fake_embed_kinds)
