@@ -208,3 +208,29 @@ def test_facts_for_entities(tmp_path):
     rows = st.facts_for_entities([se])
     assert [r["fact_id"] for r in rows] == [f]
     assert rows[0]["s_key"] == "cluny" and rows[0]["o_key"] == "abbaye"
+
+def test_graph_cols_expose_kind_and_set(tmp_path):
+    st = Store(str(tmp_path / "gc.db"), embed_dim=3); st.init_db()
+    s = st.create_set("S"); d = st.create_document(s, "doc", "text")
+    se = st.create_entity(d, "Cluny", "cluny", kind="entity")
+    oe = st.create_entity(d, "910", "910", kind="value")
+    f = st.add_fact(d, {"subject": "Cluny", "predicate": "fonde", "object": "910"},
+                    subject_entity_id=se, object_entity_id=oe)
+    r0 = st.facts_for_set(s)[0]
+    assert r0["s_kind"] == "entity" and r0["o_kind"] == "value" and r0["set_id"] == s
+    # facts_for_entities expose aussi set_id (JOIN documents ajouté)
+    r1 = st.facts_for_entities([se])[0]
+    assert r1["set_id"] == s and r1["s_kind"] == "entity" and r1["fact_id"] == f
+
+def test_entity_kind_default_and_promote(tmp_path):
+    st = Store(str(tmp_path / "kind.db"), embed_dim=3); st.init_db()
+    d = st.create_document(st.create_set("S"), "doc", "text")
+    def kind_of(eid):
+        return st.conn.execute("SELECT kind FROM entities WHERE id=?", (eid,)).fetchone()[0]
+    e_def = st.create_entity(d, "Cluny", "cluny")               # défaut -> entity
+    e_val = st.create_entity(d, "910", "910", kind="value")     # explicite value
+    assert kind_of(e_def) == "entity" and kind_of(e_val) == "value"
+    st.promote_entity_kind(e_val)                               # value -> entity (idempotent)
+    assert kind_of(e_val) == "entity"
+    st.promote_entity_kind(e_def)                               # déjà entity -> no-op
+    assert kind_of(e_def) == "entity"

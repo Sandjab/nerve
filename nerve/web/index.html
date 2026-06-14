@@ -3,24 +3,15 @@
 <head>
 <meta charset="utf-8">
 <title>nerve</title>
+<link rel="stylesheet" href="/theme.css">
 <script src="https://unpkg.com/force-graph@1.43.5/dist/force-graph.min.js"></script>
-<style>
-  :root{--paper:#F4F6FA;--ink:#15202E;--blue:#23537F;--blue-deep:#142E49;--bordeaux:#7C2A38;--line:#D7DFE9}
-  *{box-sizing:border-box}
-  html,body{margin:0;height:100%;background:var(--paper);color:var(--ink);font-family:-apple-system,system-ui,sans-serif}
-  #top{display:flex;gap:8px;padding:10px;background:var(--blue-deep)}
-  #top textarea{flex:1;height:46px;border-radius:6px;border:1px solid var(--line);padding:8px;font-family:inherit}
-  #top button{background:#2C77B6;color:#fff;border:0;border-radius:6px;padding:0 16px;cursor:pointer}
-  #graph{position:absolute;left:260px;right:0;bottom:0;top:66px}
-  #side{position:absolute;left:0;top:66px;bottom:0;width:260px;overflow:auto;
-        background:#fff;border-right:1px solid var(--line);padding:10px;font-size:13px}
-  #side h3{margin:10px 0 4px;font-size:12px;text-transform:uppercase;color:var(--blue)}
-  #side input{width:100%;padding:6px;margin:2px 0;border:1px solid var(--line);border-radius:5px}
-  #side button{width:100%;padding:6px;margin:2px 0;background:#2C77B6;color:#fff;border:0;border-radius:5px;cursor:pointer}
-  #side .item{padding:4px 6px;border-radius:5px;cursor:pointer}
-  #side .item:hover{background:var(--paper)}
-  #results .r{padding:4px 6px;border-bottom:1px solid var(--line);font-size:12px}
-</style>
+<script src="https://cdn.jsdelivr.net/npm/graphology@0.25.4/dist/graphology.umd.min.js"></script>
+<!-- louvain : le bundle UMD graphology-library casse en navigateur (dépendance Node crypto) ;
+     on charge le package standalone en ESM et on l'expose en global pour graph.js. -->
+<script type="module">
+  import louvain from "https://cdn.jsdelivr.net/npm/graphology-communities-louvain/+esm";
+  window.graphologyLouvain = louvain;
+</script>
 </head>
 <body>
   <div id="top">
@@ -28,6 +19,28 @@
     <button id="go">Extraire</button>
   </div>
   <div id="graph"></div>
+  <div id="controls">
+    <label>Couleur
+      <select id="colorMode">
+        <option value="community">Communauté</option>
+        <option value="set">Set</option>
+        <option value="type">Type</option>
+        <option value="uniform">Uniforme</option>
+      </select>
+    </label>
+    <label>Taille
+      <select id="sizeMode">
+        <option value="centrality">Centralité</option>
+        <option value="mentions">Mentions</option>
+        <option value="fixed">Fixe</option>
+      </select>
+    </label>
+    <button id="edgeLabelsBtn" class="toggle">étiquettes</button>
+    <button id="pathBtn" class="toggle">chemin</button>
+    <button id="themeBtn" class="toggle">☾</button>
+  </div>
+  <div id="legend"></div>
+  <div id="factcard"></div>
   <div id="side">
     <h3>Recherche</h3>
     <input id="q" placeholder="recherche sémantique…">
@@ -39,97 +52,6 @@
     <h3>Sets</h3>
     <div id="sets"></div>
   </div>
-<script>
-const PAPER="#F4F6FA";
-// force-graph rend les labels en HTML (innerHTML) : on échappe le texte extrait
-// par le LLM (issu de texte utilisateur arbitraire) pour éviter un XSS stocké.
-function escapeHtml(str){
-  return str ? String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;") : "";
-}
-const G=ForceGraph()(document.getElementById("graph"))
-  .backgroundColor(PAPER)
-  .nodeColor(()=> "#23537F")
-  .nodeLabel(n=> escapeHtml(n.label||n.id))
-  .linkColor(()=> "rgba(35,83,127,0.35)")
-  .linkLabel(l=> escapeHtml(l.predicate))
-  .linkDirectionalArrowLength(3.5).linkDirectionalArrowRelPos(0.92);
-
-let nodes=new Map(), links=[], linkKeys=new Set();
-function addFact(f){
-  const s=f.subject_canonical||f.subject, o=f.object_canonical||f.object;
-  if(!s||!o) return;
-  nodes.set(s,{id:s}); nodes.set(o,{id:o});
-  const k=s+"\u0001"+(f.predicate||"")+"\u0001"+o;   // dédup (replay + live peuvent recouvrir)
-  if(linkKeys.has(k)) return;
-  linkKeys.add(k);
-  links.push({source:s,target:o,predicate:f.predicate});
-}
-function redraw(){ G.graphData({nodes:[...nodes.values()],links}); }
-
-document.getElementById("go").addEventListener("click", async ()=>{
-  const text=document.getElementById("txt").value.trim(); if(!text) return;
-  nodes=new Map(); links=[]; linkKeys=new Set(); redraw();
-  const r=await fetch("/api/documents",{method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({title:"Coller",text})});
-  const {document_id}=await r.json();
-  const es=new EventSource(`/api/documents/${document_id}/events`);
-  es.onmessage=(e)=>{
-    const m=JSON.parse(e.data);
-    if(m.type==="replay"){ m.facts.forEach(addFact); redraw(); }
-    else if(m.type==="fact" && !m.is_duplicate){ addFact(m.fact); redraw(); }
-    else if(m.type==="done"||m.type==="error"){ es.close(); }
-  };
-  es.onerror=()=>es.close();
-});
-// --- niveaux Set / Transverse / Recherche (I-4) ---
-function renderGraph(data){
-  linkKeys=new Set();
-  G.graphData({nodes:data.nodes||[], links:data.links||[]});
-}
-async function loadSets(){
-  const sets=await (await fetch("/api/sets")).json();
-  const box=document.getElementById("sets"); box.replaceChildren();
-  sets.forEach(s=>{
-    const el=document.createElement("div"); el.className="item";
-    el.textContent=`${s.name} (${s.document_count})`;
-    el.onclick=()=>openSet(s.id, el);
-    box.appendChild(el);
-  });
-}
-async function openSet(id, el){
-  renderGraph(await (await fetch(`/api/sets/${id}/graph`)).json());
-  const detail=await (await fetch(`/api/sets/${id}`)).json();
-  const prev=document.querySelector("#setDocs"); if(prev) prev.remove();
-  const sub=document.createElement("div"); sub.id="setDocs";
-  detail.documents.forEach(d=>{
-    const elDoc=document.createElement("div"); elDoc.className="item"; elDoc.style.paddingLeft="16px";
-    elDoc.textContent=`· ${d.title}`;
-    elDoc.onclick=(e)=>{ e.stopPropagation(); openDocument(d.id); };
-    sub.appendChild(elDoc);
-  });
-  el.insertAdjacentElement("afterend", sub);
-}
-async function openDocument(id){
-  const facts=await (await fetch(`/api/documents/${id}/facts`)).json();
-  nodes=new Map(); links=[]; linkKeys=new Set();
-  facts.forEach(addFact); redraw();
-}
-document.getElementById("searchBtn").addEventListener("click", async ()=>{
-  const q=document.getElementById("q").value.trim(); if(!q) return;
-  const res=await (await fetch(`/api/search?q=${encodeURIComponent(q)}`)).json();
-  const box=document.getElementById("results"); box.replaceChildren();
-  (res.results||[]).forEach(r=>{
-    const el=document.createElement("div"); el.className="r";
-    el.textContent=`${r.subject} · ${r.predicate} · ${r.object}`;
-    box.appendChild(el);
-  });
-});
-document.getElementById("transBtn").addEventListener("click", async ()=>{
-  const ent=document.getElementById("ent").value.trim(); if(!ent) return;
-  renderGraph(await (await fetch(`/api/transverse?entity=${encodeURIComponent(ent)}`)).json());
-});
-loadSets();
-</script>
+  <script src="/graph.js"></script>
 </body>
 </html>

@@ -10,6 +10,10 @@ from nerve.embeddings import embed
 from nerve.entities import EntityResolver
 from nerve.dedup import FactDeduper
 
+def _kind(raw) -> str:
+    """Normalise le type d'un nœud : 'value' seulement si explicitement value, sinon entity."""
+    return "value" if str(raw or "").strip().lower() == "value" else "entity"
+
 async def run_extraction(cfg: Config, store: Store, doc_id: int,
                         segments: list[tuple[str, str]], *,
                         start_segment: int = 0, start_chunk: int = 0, client=None
@@ -42,8 +46,10 @@ async def run_extraction(cfg: Config, store: Store, doc_id: int,
                     for fact in parser.feed(delta):
                         if not fact.get("subject") or not fact.get("object"):
                             continue
-                        sid = await resolver.resolve(fact["subject"])
-                        oid = await resolver.resolve(fact["object"])
+                        sid = await resolver.resolve(
+                            fact["subject"], _kind(fact.get("subject_kind")))
+                        oid = await resolver.resolve(
+                            fact["object"], _kind(fact.get("object_kind")))
                         is_dup, dup_of, vec = await deduper.check(fact)
                         fid = store.add_fact(
                             doc_id, fact, is_duplicate=is_dup, dup_of_id=dup_of,

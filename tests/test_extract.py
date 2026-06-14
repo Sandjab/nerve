@@ -32,3 +32,9 @@ def test_system_prompt_porte_les_regles_canoniques():
     assert "canonique" in p
     assert "même chaîne" in p or "meme chaine" in p
     assert "description" in p
+
+def test_fact_schema_has_kind_fields():
+    from nerve.extract import FACT_SCHEMA
+    props = FACT_SCHEMA["properties"]
+    assert props["subject_kind"]["enum"] == ["entity", "value"]
+    assert props["object_kind"]["enum"] == ["entity", "value"]

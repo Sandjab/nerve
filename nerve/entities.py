@@ -57,22 +57,27 @@ class EntityResolver:
         best = sorted(self._surface[eid].items(), key=lambda kv: (-kv[1], len(kv[0])))[0][0]
         self.store.set_entity_canonical(eid, best)
 
-    async def resolve(self, name: str) -> int:
+    async def resolve(self, name: str, kind: str = "entity") -> int:
         key = normalized_key(name)
         if key in self._by_key:
             eid = self._by_key[key]
             self.store.bump_entity_mention(eid)
+            if kind == "entity":
+                self.store.promote_entity_kind(eid)
             self._note(eid, name)
             return eid
         vec = await self.embed_fn(name)
         eid = self._match(key, vec)
         if eid is None:
-            eid = self.store.create_entity(self.doc, canonical_name=name, normalized_key=key)
+            eid = self.store.create_entity(self.doc, canonical_name=name,
+                                           normalized_key=key, kind=kind)
             self.store.add_entity_vector(eid, vec)
             self._entities.append((eid, vec, key))
             self._surface[eid] = Counter()
         else:
             self.store.bump_entity_mention(eid)
+            if kind == "entity":
+                self.store.promote_entity_kind(eid)
         self._by_key[key] = eid
         self._note(eid, name)
         return eid

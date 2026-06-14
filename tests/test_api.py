@@ -235,3 +235,14 @@ def test_transverse_endpoint(tmp_path, monkeypatch):
     empty = client.get("/api/transverse?entity=Inconnu&k=1").json()
     assert empty == {"nodes": [], "links": []}
     assert client.get("/api/transverse?entity=").status_code == 400
+
+def test_static_assets_served(tmp_path, monkeypatch):
+    monkeypatch.setenv("NERVE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("EMBED_DIM", "3")
+    import importlib, nerve.api as api
+    importlib.reload(api)
+    client = TestClient(api.app)
+    js = client.get("/graph.js")
+    assert js.status_code == 200 and "javascript" in js.headers["content-type"]
+    css = client.get("/theme.css")
+    assert css.status_code == 200 and "css" in css.headers["content-type"]
