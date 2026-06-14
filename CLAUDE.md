@@ -41,7 +41,7 @@ Pipeline : texte / URL / fichiers → **extraction LLM streamée** → résoluti
 - **DB de dev jetable, sans migration** : le schéma évolue **par recréation**. À tout changement de schéma
   → `rm -f data/nerve.db*` (la DB est dans `.gitignore`). N'écris **aucune** migration.
 - **Providers configurables** LLM ↔ embeddings, séparés, via env (endpoints OpenAI-compatibles).
-  Défaut : Ollama `qwen3.6` + `bge-m3` (1024 dims) ; bascule OpenRouter possible par env.
+  Défaut : Ollama `mistral-small3.2:24b-instruct-2506-q8_0` + `bge-m3` (1024 dims) ; bascule OpenRouter possible par env.
 - **Front anti-XSS** : texte issu du LLM via `textContent` / `replaceChildren` (**jamais** `innerHTML`) ;
   labels force-graph via `escapeHtml`.
 - **graphology louvain en ESM** : import `graphology-communities-louvain/+esm` (module async → garder).
