@@ -71,8 +71,8 @@ async def list_llm_models():
         raise HTTPException(status_code=502, detail=str(e))
     def norm(m):                                  # Ollama : absence de tag ≡ ':latest'
         return m if ":" in m else f"{m}:latest"
-    embed = norm(cfg.embed.model)
-    models = [m for m in models if norm(m) != embed]
+    embed_norm = norm(cfg.embed.model)              # éviter de masquer la fonction embed importée
+    models = [m for m in models if norm(m) != embed_norm]
     want = norm(cfg.llm.model)                    # défaut = id réel correspondant au modèle configuré
     default = next((m for m in models if norm(m) == want), cfg.llm.model)
     return {"models": models, "default": default}
