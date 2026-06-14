@@ -271,3 +271,25 @@ def test_models_endpoint_provider_down_502(tmp_path, monkeypatch):
     monkeypatch.setattr(api, "list_models", boom)
     client = TestClient(api.app)
     assert client.get("/api/models").status_code == 502
+
+def test_create_document_stores_model_in_params(tmp_path, monkeypatch):
+    monkeypatch.setenv("NERVE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("EMBED_DIM", "2")
+    import importlib, nerve.api as api
+    importlib.reload(api)
+    client = TestClient(api.app)
+    r = client.post("/api/documents", json={"text": "le chat dort", "model": "gemma4"})
+    assert r.status_code == 200
+    doc = client.get(f"/api/documents/{r.json()['document_id']}").json()
+    assert json.loads(doc["params_json"])["model"] == "gemma4"
+
+def test_create_document_without_model_omits_key(tmp_path, monkeypatch):
+    monkeypatch.setenv("NERVE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("EMBED_DIM", "2")
+    import importlib, nerve.api as api
+    importlib.reload(api)
+    client = TestClient(api.app)
+    r = client.post("/api/documents", json={"text": "le chat dort"})
+    doc = client.get(f"/api/documents/{r.json()['document_id']}").json()
+    params = json.loads(doc["params_json"])
+    assert "model" not in params and params["dedup_field"] == api.cfg.dedup_field

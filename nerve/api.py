@@ -37,10 +37,14 @@ class CreateDoc(BaseModel):
     url: str | None = None
     set_id: int | None = None
     set_name: str = "Défaut"
+    model: str | None = None
 
 @app.post("/api/documents")
 async def create_document(body: CreateDoc):
     set_id = body.set_id or store.create_set(body.set_name)
+    params = {"dedup_field": cfg.dedup_field}
+    if body.model:
+        params["model"] = body.model
     if body.url:
         try:
             md, transcoded_title = await transcode_url(cfg, body.url)
@@ -48,11 +52,10 @@ async def create_document(body: CreateDoc):
             raise HTTPException(status_code=422, detail=str(e))
         title = body.title if body.title != "Sans titre" else (transcoded_title or body.url)
         doc_id = store.create_document(set_id, title, "url", source_ref=body.url,
-                                       params={"dedup_field": cfg.dedup_field})
+                                       params=params)
         segments = [(md, "")]
     elif body.text:
-        doc_id = store.create_document(set_id, body.title, "text",
-                                       params={"dedup_field": cfg.dedup_field})
+        doc_id = store.create_document(set_id, body.title, "text", params=params)
         segments = [(body.text, "")]
     else:
         raise HTTPException(status_code=400, detail="text ou url requis")
