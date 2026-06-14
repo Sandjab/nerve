@@ -300,14 +300,17 @@ document.getElementById("go").addEventListener("click", async () => {
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({title:"Coller", text})}));
   } catch(err) {
-    setExtracting(false); setStatus(null);
-    showError("Extraction impossible : " + err.message);
+    if(gen === esGen){          // ne pas réinitialiser l'UI d'une extraction plus récente
+      setExtracting(false); setStatus(null);
+      showError("Extraction impossible : " + err.message);
+    }
     return;
   }
   if(gen !== esGen) return;          // un autre « Extraire » a pris la main entre-temps
   const es = new EventSource(`/api/documents/${document_id}/events`);
   activeES = es;
   es.onmessage = (e) => {
+    if(activeES !== es) return;   // ignorer les messages d'un flux supplanté
     let m;
     try { m = JSON.parse(e.data); } catch(err) { console.warn("frame SSE invalide:", e.data); return; }
     if(m.type === "replay"){ m.facts.forEach(addFact); redraw(); setStatus(`Extraction… ${links.length} faits`, "live"); }
@@ -321,7 +324,14 @@ document.getElementById("go").addEventListener("click", async () => {
       }else{ setStatus(null); showError("Extraction échouée : " + (m.message || "")); }
     }
   };
-  es.onerror = () => { es.close(); if(activeES === es) activeES = null; setExtracting(false); setStatus(null); };
+  es.onerror = () => {           // n'agir que pour le flux courant ; signaler l'interruption (fail-loud)
+    es.close();
+    if(activeES === es){
+      activeES = null;
+      setExtracting(false); setStatus(null);
+      showError("Flux d'extraction interrompu.");
+    }
+  };
 });
 
 // ---- navigation sets / docs / recherche / transverse (I-4) ----
