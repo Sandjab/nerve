@@ -69,8 +69,13 @@ async def list_llm_models():
         models = await list_models(cfg.llm)
     except Exception as e:                       # fail-loud, message exploitable côté UI
         raise HTTPException(status_code=502, detail=f"Modèles indisponibles : {e}")
-    return {"models": [m for m in models if m != cfg.embed.model],
-            "default": cfg.llm.model}
+    def norm(m):                                  # Ollama : absence de tag ≡ ':latest'
+        return m if ":" in m else f"{m}:latest"
+    embed = norm(cfg.embed.model)
+    models = [m for m in models if norm(m) != embed]
+    want = norm(cfg.llm.model)                    # défaut = id réel correspondant au modèle configuré
+    default = next((m for m in models if norm(m) == want), cfg.llm.model)
+    return {"models": models, "default": default}
 
 @app.post("/api/documents/upload")
 async def upload_document(file: UploadFile = File(...), set_id: int | None = Form(None),

@@ -293,3 +293,19 @@ def test_create_document_without_model_omits_key(tmp_path, monkeypatch):
     doc = client.get(f"/api/documents/{r.json()['document_id']}").json()
     params = json.loads(doc["params_json"])
     assert "model" not in params and params["dedup_field"] == api.cfg.dedup_field
+
+def test_models_endpoint_normalises_latest_tag(tmp_path, monkeypatch):
+    # Ollama renvoie les ids avec ':latest' alors que la config est sans tag :
+    # l'embed doit être exclu malgré le tag, et le défaut doit pointer sur l'id réel.
+    monkeypatch.setenv("NERVE_DATA_DIR", str(tmp_path))
+    monkeypatch.setenv("EMBED_DIM", "2")
+    import importlib, nerve.api as api
+    importlib.reload(api)
+    async def fake_list(cfg, *, client=None):
+        return [f"{api.cfg.embed.model}:latest", f"{api.cfg.llm.model}:latest", "gemma4:latest"]
+    monkeypatch.setattr(api, "list_models", fake_list)
+    client = TestClient(api.app)
+    res = client.get("/api/models").json()
+    assert f"{api.cfg.embed.model}:latest" not in res["models"]      # embed exclu malgré ':latest'
+    assert res["default"] == f"{api.cfg.llm.model}:latest"           # défaut = id réel de la liste
+    assert f"{api.cfg.llm.model}:latest" in res["models"]
