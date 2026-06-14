@@ -16,6 +16,8 @@ const T = () => THEMES[theme];
 
 let colorMode = "community", sizeMode = "centrality", showEdgeLabels = false;
 let pathKeys = new Set();   // arêtes "srctgt" surlignées (chemin le plus long)
+let activeES = null;        // connexion SSE d'extraction en cours
+const closeActiveES = () => { if(activeES){ activeES.close(); activeES = null; } };
 
 // force-graph rend les labels en HTML : on échappe le texte LLM (XSS stocké).
 function escapeHtml(str){
@@ -94,12 +96,12 @@ function analyze(data){
 
 // ---- chemin le plus long (heuristique bornée : DFS depuis les hauts degrés) ----
 function longestPath(data){
-  const adj = new Map(); data.nodes.forEach(n => adj.set(n.id, []));
+  const adj = new Map(); data.nodes.forEach(n => adj.set(n.id, new Set()));
   data.links.forEach(l => {
     const a = l.source.id || l.source, b = l.target.id || l.target;
-    if(adj.has(a) && adj.has(b)){ adj.get(a).push(b); adj.get(b).push(a); }
+    if(adj.has(a) && adj.has(b)){ adj.get(a).add(b); adj.get(b).add(a); }   // Set : dédup des prédicats parallèles
   });
-  const order = [...adj.keys()].sort((x, y) => adj.get(y).length - adj.get(x).length);
+  const order = [...adj.keys()].sort((x, y) => adj.get(y).size - adj.get(x).size);
   let best = [];
   const CAP = 6;                                  // fanout plafonné (anti-explosion)
   function dfs(node, seen, path){
@@ -203,19 +205,21 @@ function redraw(){ G.graphData({nodes:[...nodes.values()], links}); applyStyles(
 
 document.getElementById("go").addEventListener("click", async () => {
   const text = document.getElementById("txt").value.trim(); if(!text) return;
+  closeActiveES();
   nodes = new Map(); links = []; linkKeys = new Set(); pathKeys = new Set(); redraw();
   const r = await fetch("/api/documents", {method:"POST",
     headers:{"Content-Type":"application/json"},
     body:JSON.stringify({title:"Coller", text})});
   const {document_id} = await r.json();
   const es = new EventSource(`/api/documents/${document_id}/events`);
+  activeES = es;
   es.onmessage = (e) => {
     const m = JSON.parse(e.data);
     if(m.type === "replay"){ m.facts.forEach(addFact); redraw(); }
     else if(m.type === "fact" && !m.is_duplicate){ addFact(m.fact); redraw(); }
-    else if(m.type === "done" || m.type === "error"){ es.close(); }
+    else if(m.type === "done" || m.type === "error"){ es.close(); if(activeES === es) activeES = null; }
   };
-  es.onerror = () => es.close();
+  es.onerror = () => { es.close(); if(activeES === es) activeES = null; };
 });
 
 // ---- navigation sets / docs / recherche / transverse (I-4) ----
@@ -230,6 +234,7 @@ async function loadSets(){
   });
 }
 async function openSet(id, el){
+  closeActiveES();
   renderGraph(await (await fetch(`/api/sets/${id}/graph`)).json());
   const detail = await (await fetch(`/api/sets/${id}`)).json();
   const prev = document.querySelector("#setDocs"); if(prev) prev.remove();
@@ -243,6 +248,7 @@ async function openSet(id, el){
   el.insertAdjacentElement("afterend", sub);
 }
 async function openDocument(id){
+  closeActiveES();
   const {facts} = await (await fetch(`/api/documents/${id}/facts`)).json();
   nodes = new Map(); links = []; linkKeys = new Set(); pathKeys = new Set();
   (facts || []).forEach(addFact); redraw();
@@ -259,6 +265,7 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
 });
 document.getElementById("transBtn").addEventListener("click", async () => {
   const ent = document.getElementById("ent").value.trim(); if(!ent) return;
+  closeActiveES();
   renderGraph(await (await fetch(`/api/transverse?entity=${encodeURIComponent(ent)}`)).json());
 });
 
