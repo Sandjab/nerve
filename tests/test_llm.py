@@ -31,3 +31,21 @@ async def test_stream_raises_on_error_frame():
     with pytest.raises(RuntimeError, match="model not found"):
         async for _ in stream_chat(cfg, [{"role": "user", "content": "x"}], client=client):
             pass
+
+from nerve.llm import list_models
+
+async def test_list_models_returns_ids():
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path.endswith("/models")
+        return httpx.Response(200, json={"data": [{"id": "qwen3.6"}, {"id": "bge-m3"}]})
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    cfg = ProviderConfig("http://x/v1", "k", "m")
+    assert await list_models(cfg, client=client) == ["qwen3.6", "bge-m3"]
+
+async def test_list_models_raises_on_error():
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, text="boom")
+    client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
+    cfg = ProviderConfig("http://x/v1", "k", "m")
+    with pytest.raises(httpx.HTTPStatusError):
+        await list_models(cfg, client=client)
