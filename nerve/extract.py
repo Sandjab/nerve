@@ -30,6 +30,7 @@ FACT_RESPONSE_FORMAT = {
         "schema": {"type": "array", "items": {
             **FACT_SCHEMA,
             "required": list(FACT_SCHEMA["properties"].keys()),
+            "additionalProperties": False,  # requis par le mode strict d'OpenAI
         }},
     },
 }

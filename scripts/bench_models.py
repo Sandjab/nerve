@@ -71,12 +71,13 @@ trois jours en pénitent dans la neige. L'humiliation de Canossa devient le symb
 la victoire momentanée de la papauté sur l'Empire.
 """
 
-# Schéma STRICT : tous les champs requis (vs FACT_RESPONSE_FORMAT où seuls s/p/o le sont)
-_STRICT_SCHEMA = {**FACT_SCHEMA, "required": list(FACT_SCHEMA["properties"].keys())}
-STRICT_RESPONSE_FORMAT = {
+# Schéma LÂCHE : seuls subject/predicate/object requis (ancien défaut de Nerve avant le
+# passage en strict). Sert de point de comparaison face à FACT_RESPONSE_FORMAT (désormais
+# strict, tous champs requis) pour mesurer l'apport du mode strict.
+LOOSE_RESPONSE_FORMAT = {
     "type": "json_schema",
-    "json_schema": {"name": "facts", "strict": True,
-                    "schema": {"type": "array", "items": _STRICT_SCHEMA}},
+    "json_schema": {"name": "facts", "strict": False,
+                    "schema": {"type": "array", "items": FACT_SCHEMA}},
 }
 
 # Spécificités par modèle : interrupteur de raisonnement.
@@ -181,7 +182,7 @@ async def main():
     ap.add_argument("--thinking", action="store_true", help="laisser le raisonnement actif")
     args = ap.parse_args()
     cfg = load_config()
-    rf = STRICT_RESPONSE_FORMAT if args.strict else FACT_RESPONSE_FORMAT
+    rf = FACT_RESPONSE_FORMAT if args.strict else LOOSE_RESPONSE_FORMAT
     print(f"config : temp={args.temp}  schéma={'STRICT' if args.strict else 'lâche'}  "
           f"thinking={'ON' if args.thinking else 'OFF'}  repeat={args.repeat}")
 
