@@ -37,6 +37,7 @@ CREATE TABLE IF NOT EXISTS entities (
   document_id INTEGER REFERENCES documents(id),
   canonical_name TEXT NOT NULL, normalized_key TEXT NOT NULL,
   mention_count INTEGER DEFAULT 1,
+  kind TEXT DEFAULT 'entity',
   created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_facts_doc ON facts(document_id);
@@ -160,12 +161,19 @@ class Store:
         return [r["id"] for r in rows]
 
     def create_entity(self, document_id: int, canonical_name: str,
-                      normalized_key: str) -> int:
+                      normalized_key: str, kind: str = "entity") -> int:
         cur = self.conn.execute(
-            "INSERT INTO entities(document_id, canonical_name, normalized_key) "
-            "VALUES (?, ?, ?)", (document_id, canonical_name, normalized_key))
+            "INSERT INTO entities(document_id, canonical_name, normalized_key, kind) "
+            "VALUES (?, ?, ?, ?)", (document_id, canonical_name, normalized_key, kind))
         self.conn.commit()
         return cur.lastrowid
+
+    def promote_entity_kind(self, entity_id: int) -> None:
+        """Promotion vers 'entity' (entity domine value) ; no-op si déjà 'entity'."""
+        self.conn.execute(
+            "UPDATE entities SET kind = 'entity' WHERE id = ? AND kind = 'value'",
+            (entity_id,))
+        self.conn.commit()
 
     def find_entity_by_key(self, document_id: int, normalized_key: str) -> int | None:
         r = self.conn.execute(
