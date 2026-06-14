@@ -87,14 +87,14 @@ async def main() -> None:
             set_id = store.create_set(set_name)
             for title, facts in docs:
                 doc_id = store.create_document(set_id, title, "text")
-                ent_ids: dict[str, int] = {}        # normalized_key -> entity_id (par document)
+                ent_ids: dict[str, tuple[int, str]] = {}   # normalized_key -> (entity_id, canonical_name)
 
                 def ent(name: str) -> int:
                     key = normalized_key(name)
                     if key not in ent_ids:
                         kind = "value" if name in VALUES else "entity"
-                        ent_ids[key] = store.create_entity(doc_id, name, key, kind)
-                    return ent_ids[key]
+                        ent_ids[key] = (store.create_entity(doc_id, name, key, kind), name)
+                    return ent_ids[key][0]
 
                 fact_ids: list[int] = []
                 for subj, pred, obj, conf, desc in facts:
@@ -107,11 +107,12 @@ async def main() -> None:
                         subject_entity_id=sid, object_entity_id=oid)
                     fact_ids.append(fid)
 
-                # Vecteurs d'entités (canonical_name) et de faits (triplet + description).
-                keys = list(ent_ids)
-                ent_vecs = await embed(cfg.embed, keys, client=client)
-                for key, vec in zip(keys, ent_vecs):
-                    store.add_entity_vector(ent_ids[key], vec)
+                # Vecteurs d'entités : embarquer le NOM CANONIQUE — comme le pipeline réel
+                # (entities.py resolve → embed(name)), et NON la clé normalisée.
+                ents = list(ent_ids.values())              # [(entity_id, canonical_name), ...]
+                ent_vecs = await embed(cfg.embed, [name for _, name in ents], client=client)
+                for (eid, _), vec in zip(ents, ent_vecs):
+                    store.add_entity_vector(eid, vec)
 
                 fact_texts = [f"{s} {p} {o}. {d}" for s, p, o, _, d in facts]
                 fact_vecs = await embed(cfg.embed, fact_texts, client=client)
@@ -119,7 +120,7 @@ async def main() -> None:
                     store.add_fact_vector(fid, vec)
 
                 store.finish_document(doc_id)
-                print(f"  set «{set_name}» / doc «{title}» : {len(facts)} faits, {len(keys)} entités")
+                print(f"  set «{set_name}» / doc «{title}» : {len(facts)} faits, {len(ents)} entités")
 
     print("Seed terminé.")
 
