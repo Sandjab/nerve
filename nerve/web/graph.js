@@ -17,7 +17,34 @@ const T = () => THEMES[theme];
 let colorMode = "community", sizeMode = "centrality", showEdgeLabels = false;
 let pathKeys = new Set();   // arêtes "srctgt" surlignées (chemin le plus long)
 let activeES = null;        // connexion SSE d'extraction en cours
+let esGen = 0;              // jeton de génération : invalide une extraction supplantée par une autre
 const closeActiveES = () => { if(activeES){ activeES.close(); activeES = null; } };
+
+// ---- bannière d'erreur (fail-loud côté UI) ----
+const errorBox = document.createElement("div");
+errorBox.id = "errorBanner";
+errorBox.style.cssText = "position:fixed;top:64px;left:50%;transform:translateX(-50%);z-index:50;"
+  + "background:#7C2A38;color:#fff;padding:8px 16px;border-radius:8px;font:14px system-ui,sans-serif;"
+  + "box-shadow:0 4px 14px rgba(0,0,0,.25);max-width:80%;display:none;";
+document.body.appendChild(errorBox);
+let errorTimer = null;
+function showError(msg){
+  errorBox.textContent = msg;                 // textContent : aucune injection possible
+  errorBox.style.display = "block";
+  clearTimeout(errorTimer);
+  errorTimer = setTimeout(() => { errorBox.style.display = "none"; }, 6000);
+}
+
+// fetch JSON fail-loud : lève sur statut non-2xx (en extrayant le `detail` renvoyé par FastAPI).
+async function getJSON(url, opts){
+  const r = await fetch(url, opts);
+  if(!r.ok){
+    let detail = `HTTP ${r.status}`;
+    try { const j = await r.json(); if(j && j.detail) detail = j.detail; } catch(_){}
+    throw new Error(detail);
+  }
+  return r.json();
+}
 
 // force-graph rend les labels en HTML : on échappe le texte LLM (XSS stocké).
 function escapeHtml(str){
@@ -63,9 +90,23 @@ function drawEdgeLabel(link, ctx, scale){
   ctx.textAlign = "center"; ctx.textBaseline = "middle";
   ctx.fillText(link.predicate, x, y);
 }
+// nom de l'entité dessiné sous le nœud, au-delà d'un seuil de zoom (anti-encombrement)
+const NODE_LABEL_MIN_SCALE = 0.7;
+function drawNodeLabel(node, ctx, scale){
+  if(scale < NODE_LABEL_MIN_SCALE) return;
+  const label = node.label || node.id;
+  if(!label) return;
+  const r = Math.sqrt(Math.max(0, nodeVal(node))) * 4;   // rayon ≈ nodeRelSize par défaut
+  const f = 11 / scale;
+  ctx.font = `${f}px -apple-system,system-ui,sans-serif`;
+  ctx.fillStyle = T().text;
+  ctx.textAlign = "center"; ctx.textBaseline = "top";
+  ctx.fillText(label, node.x, node.y + r + 2 / scale);
+}
 
 const G = ForceGraph()(document.getElementById("graph"))
   .nodeLabel(n => escapeHtml(n.label || n.id))
+  .nodeCanvasObjectMode(() => "after").nodeCanvasObject(drawNodeLabel)
   .linkDirectionalArrowLength(3.5).linkDirectionalArrowRelPos(0.92);
 
 function applyStyles(){
@@ -195,7 +236,10 @@ document.getElementById("graph").addEventListener("mousemove", e => {
 function addFact(f){
   const s = f.subject_canonical || f.subject, o = f.object_canonical || f.object;
   if(!s || !o) return;
-  nodes.set(s, {id:s}); nodes.set(o, {id:o});
+  // idempotent : préserver l'objet-nœud existant (sa référence est déjà liée aux arêtes
+  // résolues par force-graph et porte ses coordonnées) ; le recréer désancrerait les liens.
+  if(!nodes.has(s)) nodes.set(s, {id:s});
+  if(!nodes.has(o)) nodes.set(o, {id:o});
   const k = s + "\u0001" + (f.predicate || "") + "\u0001" + o;
   if(linkKeys.has(k)) return;
   linkKeys.add(k);
@@ -207,24 +251,38 @@ document.getElementById("go").addEventListener("click", async () => {
   const text = document.getElementById("txt").value.trim(); if(!text) return;
   closeActiveES();
   nodes = new Map(); links = []; linkKeys = new Set(); pathKeys = new Set(); redraw();
-  const r = await fetch("/api/documents", {method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({title:"Coller", text})});
-  const {document_id} = await r.json();
+  const gen = ++esGen;
+  let document_id;
+  try {
+    ({document_id} = await getJSON("/api/documents", {method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({title:"Coller", text})}));
+  } catch(err) {
+    showError("Extraction impossible : " + err.message);
+    return;
+  }
+  if(gen !== esGen) return;          // un autre « Extraire » a pris la main entre-temps
   const es = new EventSource(`/api/documents/${document_id}/events`);
   activeES = es;
   es.onmessage = (e) => {
-    const m = JSON.parse(e.data);
+    let m;
+    try { m = JSON.parse(e.data); } catch(err) { console.warn("frame SSE invalide:", e.data); return; }
     if(m.type === "replay"){ m.facts.forEach(addFact); redraw(); }
     else if(m.type === "fact" && !m.is_duplicate){ addFact(m.fact); redraw(); }
-    else if(m.type === "done" || m.type === "error"){ es.close(); if(activeES === es) activeES = null; }
+    else if(m.type === "done" || m.type === "error"){
+      es.close(); if(activeES === es) activeES = null;
+      if(m.type === "done"){ analyze({nodes:[...nodes.values()], links}); redraw(); }  // communautés/centralité sur le graphe extrait
+      else showError("Extraction échouée : " + (m.message || ""));
+    }
   };
   es.onerror = () => { es.close(); if(activeES === es) activeES = null; };
 });
 
 // ---- navigation sets / docs / recherche / transverse (I-4) ----
 async function loadSets(){
-  const sets = await (await fetch("/api/sets")).json();
+  let sets;
+  try { sets = await getJSON("/api/sets"); }
+  catch(err){ showError("Chargement des sets impossible : " + err.message); return; }
   const box = document.getElementById("sets"); box.replaceChildren();
   sets.forEach(s => {
     const el = document.createElement("div"); el.className = "item";
@@ -235,8 +293,15 @@ async function loadSets(){
 }
 async function openSet(id, el){
   closeActiveES();
-  renderGraph(await (await fetch(`/api/sets/${id}/graph`)).json());
-  const detail = await (await fetch(`/api/sets/${id}`)).json();
+  let detail;
+  try {
+    const [graphData, setDetail] = await Promise.all([    // requêtes indépendantes -> en parallèle
+      getJSON(`/api/sets/${id}/graph`),
+      getJSON(`/api/sets/${id}`),
+    ]);
+    renderGraph(graphData);
+    detail = setDetail;
+  } catch(err){ showError("Ouverture du set impossible : " + err.message); return; }
   const prev = document.querySelector("#setDocs"); if(prev) prev.remove();
   const sub = document.createElement("div"); sub.id = "setDocs";
   detail.documents.forEach(d => {
@@ -249,13 +314,17 @@ async function openSet(id, el){
 }
 async function openDocument(id){
   closeActiveES();
-  const {facts} = await (await fetch(`/api/documents/${id}/facts`)).json();
+  let facts;
+  try { ({facts} = await getJSON(`/api/documents/${id}/facts`)); }
+  catch(err){ showError("Ouverture du document impossible : " + err.message); return; }
   nodes = new Map(); links = []; linkKeys = new Set(); pathKeys = new Set();
   (facts || []).forEach(addFact); redraw();
 }
 document.getElementById("searchBtn").addEventListener("click", async () => {
   const q = document.getElementById("q").value.trim(); if(!q) return;
-  const res = await (await fetch(`/api/search?q=${encodeURIComponent(q)}`)).json();
+  let res;
+  try { res = await getJSON(`/api/search?q=${encodeURIComponent(q)}`); }
+  catch(err){ showError("Recherche impossible : " + err.message); return; }
   const box = document.getElementById("results"); box.replaceChildren();
   (res.results || []).forEach(r => {
     const el = document.createElement("div"); el.className = "r";
@@ -266,7 +335,8 @@ document.getElementById("searchBtn").addEventListener("click", async () => {
 document.getElementById("transBtn").addEventListener("click", async () => {
   const ent = document.getElementById("ent").value.trim(); if(!ent) return;
   closeActiveES();
-  renderGraph(await (await fetch(`/api/transverse?entity=${encodeURIComponent(ent)}`)).json());
+  try { renderGraph(await getJSON(`/api/transverse?entity=${encodeURIComponent(ent)}`)); }
+  catch(err){ showError("Sous-graphe impossible : " + err.message); }
 });
 
 // ---- contrôles ----
