@@ -172,6 +172,14 @@ async def transverse(entity: str, sets: list[int] | None = Query(None),
         ids.add(n["entity_id"])
     return build_graph(store.facts_for_entities(list(ids), min_conf))
 
+@app.get("/graph.js")
+def graph_js():
+    return FileResponse(os.path.join(WEB, "graph.js"), media_type="application/javascript")
+
+@app.get("/theme.css")
+def theme_css():
+    return FileResponse(os.path.join(WEB, "theme.css"), media_type="text/css")
+
 @app.get("/")
 def index():
     return FileResponse(os.path.join(WEB, "index.html"))
