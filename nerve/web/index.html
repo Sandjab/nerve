@@ -35,12 +35,25 @@
         <option value="fixed">Fixe</option>
       </select>
     </label>
-    <button id="edgeLabelsBtn" class="toggle">étiquettes</button>
-    <button id="pathBtn" class="toggle">chemin</button>
-    <button id="themeBtn" class="toggle">☾</button>
+    <label>Palette
+      <select id="paletteMode">
+        <option value="default">Défaut</option>
+        <option value="cb">Daltonien-safe</option>
+      </select>
+    </label>
+    <button id="edgeLabelsBtn" class="toggle" title="Afficher le prédicat sur chaque arête">étiquettes</button>
+    <button id="pathBtn" class="toggle" title="Surligner la plus longue chaîne de relations">chemin</button>
+    <button id="themeBtn" class="toggle" title="Basculer thème clair / sombre">☾</button>
   </div>
+  <div id="status"></div>
   <div id="legend"></div>
   <div id="factcard"></div>
+  <div id="emptyState">
+    <div class="glyph">⌗</div>
+    <h2>Aucun graphe affiché</h2>
+    <p>Colle un texte ci-dessus, ouvre un set à gauche, ou cherche une entité — la structure émerge ici.</p>
+    <div class="acts"><span>Coller un texte ↑</span><span>Ouvrir un set ←</span><span>Chercher une entité ←</span></div>
+  </div>
   <div id="side">
     <h3>Recherche</h3>
     <input id="q" placeholder="recherche sémantique…">
