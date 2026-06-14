@@ -295,8 +295,12 @@ async function openSet(id, el){
   closeActiveES();
   let detail;
   try {
-    renderGraph(await getJSON(`/api/sets/${id}/graph`));
-    detail = await getJSON(`/api/sets/${id}`);
+    const [graphData, setDetail] = await Promise.all([    // requêtes indépendantes -> en parallèle
+      getJSON(`/api/sets/${id}/graph`),
+      getJSON(`/api/sets/${id}`),
+    ]);
+    renderGraph(graphData);
+    detail = setDetail;
   } catch(err){ showError("Ouverture du set impossible : " + err.message); return; }
   const prev = document.querySelector("#setDocs"); if(prev) prev.remove();
   const sub = document.createElement("div"); sub.id = "setDocs";
