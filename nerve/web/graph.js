@@ -22,7 +22,7 @@ function escapeHtml(str){
   return str ? String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;")
     .replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;") : "";
 }
-const linkKey = (l) => (l.source.id||l.source) + "" + (l.target.id||l.target);
+const linkKey = (l) => (l.source.id||l.source) + "\u0001" + (l.target.id||l.target);
 
 // ---- couleur / taille / arêtes ----
 function nodeColor(n){
@@ -118,7 +118,7 @@ function longestPath(data){
   }
   const keys = new Set();
   for(let i = 0; i + 1 < best.length; i++)
-    keys.add(best[i] + "" + best[i+1]).add(best[i+1] + "" + best[i]);
+    keys.add(best[i] + "\u0001" + best[i+1]).add(best[i+1] + "\u0001" + best[i]);
   data.nodes.forEach(n => { n._inPath = best.includes(n.id); });
   return keys;
 }
@@ -194,7 +194,7 @@ function addFact(f){
   const s = f.subject_canonical || f.subject, o = f.object_canonical || f.object;
   if(!s || !o) return;
   nodes.set(s, {id:s}); nodes.set(o, {id:o});
-  const k = s + "" + (f.predicate || "") + "" + o;
+  const k = s + "\u0001" + (f.predicate || "") + "\u0001" + o;
   if(linkKeys.has(k)) return;
   linkKeys.add(k);
   links.push({source:s, target:o, predicate:f.predicate});
@@ -243,9 +243,9 @@ async function openSet(id, el){
   el.insertAdjacentElement("afterend", sub);
 }
 async function openDocument(id){
-  const facts = await (await fetch(`/api/documents/${id}/facts`)).json();
+  const {facts} = await (await fetch(`/api/documents/${id}/facts`)).json();
   nodes = new Map(); links = []; linkKeys = new Set(); pathKeys = new Set();
-  facts.forEach(addFact); redraw();
+  (facts || []).forEach(addFact); redraw();
 }
 document.getElementById("searchBtn").addEventListener("click", async () => {
   const q = document.getElementById("q").value.trim(); if(!q) return;
