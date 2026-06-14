@@ -11,7 +11,15 @@
   #top{display:flex;gap:8px;padding:10px;background:var(--blue-deep)}
   #top textarea{flex:1;height:46px;border-radius:6px;border:1px solid var(--line);padding:8px;font-family:inherit}
   #top button{background:#2C77B6;color:#fff;border:0;border-radius:6px;padding:0 16px;cursor:pointer}
-  #graph{position:absolute;left:0;right:0;bottom:0;top:66px}
+  #graph{position:absolute;left:260px;right:0;bottom:0;top:66px}
+  #side{position:absolute;left:0;top:66px;bottom:0;width:260px;overflow:auto;
+        background:#fff;border-right:1px solid var(--line);padding:10px;font-size:13px}
+  #side h3{margin:10px 0 4px;font-size:12px;text-transform:uppercase;color:var(--blue)}
+  #side input{width:100%;padding:6px;margin:2px 0;border:1px solid var(--line);border-radius:5px}
+  #side button{width:100%;padding:6px;margin:2px 0;background:#2C77B6;color:#fff;border:0;border-radius:5px;cursor:pointer}
+  #side .item{padding:4px 6px;border-radius:5px;cursor:pointer}
+  #side .item:hover{background:var(--paper)}
+  #results .r{padding:4px 6px;border-bottom:1px solid var(--line);font-size:12px}
 </style>
 </head>
 <body>
@@ -20,6 +28,17 @@
     <button id="go">Extraire</button>
   </div>
   <div id="graph"></div>
+  <div id="side">
+    <h3>Recherche</h3>
+    <input id="q" placeholder="recherche sémantique…">
+    <button id="searchBtn">Chercher</button>
+    <div id="results"></div>
+    <h3>Transverse</h3>
+    <input id="ent" placeholder="entité (ex. Cluny)">
+    <button id="transBtn">Sous-graphe</button>
+    <h3>Sets</h3>
+    <div id="sets"></div>
+  </div>
 <script>
 const PAPER="#F4F6FA";
 // force-graph rend les labels en HTML (innerHTML) : on échappe le texte extrait
@@ -30,7 +49,7 @@ function escapeHtml(str){
 const G=ForceGraph()(document.getElementById("graph"))
   .backgroundColor(PAPER)
   .nodeColor(()=> "#23537F")
-  .nodeLabel(n=> escapeHtml(n.id))
+  .nodeLabel(n=> escapeHtml(n.label||n.id))
   .linkColor(()=> "rgba(35,83,127,0.35)")
   .linkLabel(l=> escapeHtml(l.predicate))
   .linkDirectionalArrowLength(3.5).linkDirectionalArrowRelPos(0.92);
@@ -63,6 +82,54 @@ document.getElementById("go").addEventListener("click", async ()=>{
   };
   es.onerror=()=>es.close();
 });
+// --- niveaux Set / Transverse / Recherche (I-4) ---
+function renderGraph(data){
+  linkKeys=new Set();
+  G.graphData({nodes:data.nodes||[], links:data.links||[]});
+}
+async function loadSets(){
+  const sets=await (await fetch("/api/sets")).json();
+  const box=document.getElementById("sets"); box.replaceChildren();
+  sets.forEach(s=>{
+    const el=document.createElement("div"); el.className="item";
+    el.textContent=`${s.name} (${s.document_count})`;
+    el.onclick=()=>openSet(s.id, el);
+    box.appendChild(el);
+  });
+}
+async function openSet(id, el){
+  renderGraph(await (await fetch(`/api/sets/${id}/graph`)).json());
+  const detail=await (await fetch(`/api/sets/${id}`)).json();
+  const prev=document.querySelector("#setDocs"); if(prev) prev.remove();
+  const sub=document.createElement("div"); sub.id="setDocs";
+  detail.documents.forEach(d=>{
+    const elDoc=document.createElement("div"); elDoc.className="item"; elDoc.style.paddingLeft="16px";
+    elDoc.textContent=`· ${d.title}`;
+    elDoc.onclick=(e)=>{ e.stopPropagation(); openDocument(d.id); };
+    sub.appendChild(elDoc);
+  });
+  el.insertAdjacentElement("afterend", sub);
+}
+async function openDocument(id){
+  const facts=await (await fetch(`/api/documents/${id}/facts`)).json();
+  nodes=new Map(); links=[]; linkKeys=new Set();
+  facts.forEach(addFact); redraw();
+}
+document.getElementById("searchBtn").addEventListener("click", async ()=>{
+  const q=document.getElementById("q").value.trim(); if(!q) return;
+  const res=await (await fetch(`/api/search?q=${encodeURIComponent(q)}`)).json();
+  const box=document.getElementById("results"); box.replaceChildren();
+  (res.results||[]).forEach(r=>{
+    const el=document.createElement("div"); el.className="r";
+    el.textContent=`${r.subject} · ${r.predicate} · ${r.object}`;
+    box.appendChild(el);
+  });
+});
+document.getElementById("transBtn").addEventListener("click", async ()=>{
+  const ent=document.getElementById("ent").value.trim(); if(!ent) return;
+  renderGraph(await (await fetch(`/api/transverse?entity=${encodeURIComponent(ent)}`)).json());
+});
+loadSets();
 </script>
 </body>
 </html>

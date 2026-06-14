@@ -122,3 +122,89 @@ def test_load_entities(tmp_path):
     assert (rid, canonical, key) == (eid, "Cluny", "cluny")
     assert mention == 2
     assert all(abs(a - b) < 1e-6 for a, b in zip(vec, [1.0, 0.0]))
+
+def test_list_sets_counts_documents(tmp_path):
+    st = Store(str(tmp_path / "ls.db"), embed_dim=3); st.init_db()
+    s1 = st.create_set("Alpha"); s2 = st.create_set("Beta")
+    st.create_document(s1, "d1", "text"); st.create_document(s1, "d2", "text")
+    rows = st.list_sets()
+    by_id = {r["id"]: r for r in rows}
+    assert by_id[s1]["name"] == "Alpha" and by_id[s1]["document_count"] == 2
+    assert by_id[s2]["document_count"] == 0
+
+def test_get_set_with_documents(tmp_path):
+    st = Store(str(tmp_path / "gs.db"), embed_dim=3); st.init_db()
+    s = st.create_set("S")
+    d = st.create_document(s, "doc", "text")
+    out = st.get_set(s)
+    assert out["name"] == "S"
+    assert [doc["id"] for doc in out["documents"]] == [d]
+    assert st.get_set(9999) is None
+
+def _seed_fact(st, doc_id, s_name, s_key, pred, o_name, o_key, conf=80):
+    se = st.create_entity(doc_id, s_name, s_key)
+    oe = st.create_entity(doc_id, o_name, o_key)
+    return st.add_fact(doc_id, {"subject": s_name, "predicate": pred,
+                                "object": o_name, "confidence": conf},
+                       subject_entity_id=se, object_entity_id=oe)
+
+def test_facts_for_set_enriched_rows(tmp_path):
+    st = Store(str(tmp_path / "ffs.db"), embed_dim=3); st.init_db()
+    s = st.create_set("S")
+    d = st.create_document(s, "doc", "text")
+    _seed_fact(st, d, "Cluny", "cluny", "fonde", "Abbaye", "abbaye", conf=90)
+    _seed_fact(st, d, "Cluny", "cluny", "situe", "Bourgogne", "bourgogne", conf=40)
+    rows = st.facts_for_set(s)
+    assert len(rows) == 2
+    r0 = rows[0]
+    assert r0["s_key"] == "cluny" and r0["s_name"] == "Cluny"
+    assert r0["o_key"] == "abbaye" and r0["predicate"] == "fonde"
+    # filtre min_conf
+    assert len(st.facts_for_set(s, min_conf=50)) == 1
+
+def test_search_facts_knn_and_set_filter(tmp_path):
+    st = Store(str(tmp_path / "sf.db"), embed_dim=3); st.init_db()
+    sa = st.create_set("A"); sb = st.create_set("B")
+    da = st.create_document(sa, "da", "text"); db = st.create_document(sb, "db", "text")
+    fa = st.add_fact(da, {"subject": "A", "predicate": "r", "object": "B"})
+    st.add_fact_vector(fa, [1.0, 0.0, 0.0])
+    fb = st.add_fact(db, {"subject": "C", "predicate": "r", "object": "D"})
+    st.add_fact_vector(fb, [0.0, 1.0, 0.0])
+    # requête proche de fa
+    res = st.search_facts([1.0, 0.0, 0.0], k=1)
+    assert res[0]["fact_id"] == fa and "distance" in res[0]
+    # filtre set B alors que le + proche est fa (set A) -> on récupère fb (over-fetch)
+    res_b = st.search_facts([1.0, 0.0, 0.0], k=1, sets=[sb])
+    assert [r["fact_id"] for r in res_b] == [fb]
+    assert res_b[0]["set_id"] == sb
+
+def test_entities_by_key_cross_document(tmp_path):
+    st = Store(str(tmp_path / "ebk.db"), embed_dim=3); st.init_db()
+    s = st.create_set("S")
+    d1 = st.create_document(s, "d1", "text"); d2 = st.create_document(s, "d2", "text")
+    e1 = st.create_entity(d1, "Cluny", "cluny")
+    e2 = st.create_entity(d2, "cluny", "cluny")
+    st.create_entity(d1, "Autre", "autre")
+    got = {e["id"] for e in st.entities_by_key("cluny")}
+    assert got == {e1, e2}
+
+def test_entity_neighbors_knn(tmp_path):
+    st = Store(str(tmp_path / "en.db"), embed_dim=3); st.init_db()
+    s = st.create_set("S"); d = st.create_document(s, "d", "text")
+    e1 = st.create_entity(d, "Cluny", "cluny"); st.add_entity_vector(e1, [1.0, 0.0, 0.0])
+    e2 = st.create_entity(d, "Loin", "loin"); st.add_entity_vector(e2, [0.0, 1.0, 0.0])
+    res = st.entity_neighbors([1.0, 0.0, 0.0], k=1)
+    assert res[0]["entity_id"] == e1 and res[0]["normalized_key"] == "cluny"
+
+def test_facts_for_entities(tmp_path):
+    st = Store(str(tmp_path / "ffe.db"), embed_dim=3); st.init_db()
+    s = st.create_set("S"); d = st.create_document(s, "d", "text")
+    se = st.create_entity(d, "Cluny", "cluny"); oe = st.create_entity(d, "Abbaye", "abbaye")
+    other = st.create_entity(d, "X", "x")
+    f = st.add_fact(d, {"subject": "Cluny", "predicate": "est", "object": "Abbaye"},
+                    subject_entity_id=se, object_entity_id=oe)
+    st.add_fact(d, {"subject": "X", "predicate": "p", "object": "X"},
+                subject_entity_id=other, object_entity_id=other)
+    rows = st.facts_for_entities([se])
+    assert [r["fact_id"] for r in rows] == [f]
+    assert rows[0]["s_key"] == "cluny" and rows[0]["o_key"] == "abbaye"

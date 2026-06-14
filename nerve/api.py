@@ -3,7 +3,7 @@ import os
 import json
 import asyncio
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Form, UploadFile, File
+from fastapi import FastAPI, HTTPException, Form, UploadFile, File, Query
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from nerve.config import load_config
@@ -11,6 +11,9 @@ from nerve.store import Store
 from nerve.scheduler import Scheduler, write_segments
 from nerve.transcode import transcode_url
 from nerve.ingest import ingest_upload, IngestError
+from nerve.graph import build_graph
+from nerve.entities import normalized_key
+from nerve.embeddings import embed
 
 cfg = load_config()
 store = Store(cfg.db_path, embed_dim=cfg.embed_dim)
@@ -130,6 +133,44 @@ def get_facts(doc_id: int):
     if doc is None:
         raise HTTPException(status_code=404, detail="Document introuvable")
     return {"document": doc, "facts": store.get_facts(doc_id)}
+
+@app.get("/api/sets")
+def list_sets():
+    return store.list_sets()
+
+@app.get("/api/sets/{set_id}")
+def get_set(set_id: int):
+    s = store.get_set(set_id)
+    if s is None:
+        raise HTTPException(status_code=404, detail="Set introuvable")
+    return s
+
+@app.get("/api/sets/{set_id}/graph")
+def set_graph(set_id: int, min_conf: int | None = None):
+    if store.get_set(set_id) is None:
+        raise HTTPException(status_code=404, detail="Set introuvable")
+    return build_graph(store.facts_for_set(set_id, min_conf))
+
+@app.get("/api/search")
+async def search(q: str, sets: list[int] | None = Query(None), k: int = 20):
+    if not q.strip():
+        raise HTTPException(status_code=400, detail="q requis")
+    vec = (await embed(cfg.embed, [q]))[0]
+    return {"results": store.search_facts(vec, k, sets)}
+
+@app.get("/api/transverse")
+async def transverse(entity: str, sets: list[int] | None = Query(None),
+                     min_conf: int | None = None, k: int = 10):
+    if not entity.strip():
+        raise HTTPException(status_code=400, detail="entity requis")
+    occ = store.entities_by_key(normalized_key(entity), sets)
+    if not occ:
+        return {"nodes": [], "links": []}              # entité absente -> graphe vide
+    ids = {e["id"] for e in occ}
+    vec = (await embed(cfg.embed, [entity]))[0]
+    for n in store.entity_neighbors(vec, k, sets):
+        ids.add(n["entity_id"])
+    return build_graph(store.facts_for_entities(list(ids), min_conf))
 
 @app.get("/")
 def index():

@@ -213,3 +213,115 @@ class Store:
             "WHERE e.document_id = ?", (document_id,)).fetchall()
         return [(r["id"], r["cn"], r["nk"], r["mc"],
                  np.frombuffer(r["emb"], dtype=np.float32).tolist()) for r in rows]
+
+    def list_sets(self) -> list[dict]:
+        rows = self.conn.execute(
+            "SELECT s.id AS id, s.name AS name, s.description AS description, "
+            "COUNT(d.id) AS document_count FROM source_sets s "
+            "LEFT JOIN documents d ON d.set_id = s.id "
+            "GROUP BY s.id, s.name, s.description ORDER BY s.id").fetchall()
+        return [dict(r) for r in rows]
+
+    _GRAPH_COLS = (
+        "f.id AS fact_id, f.predicate AS predicate, f.confidence AS confidence, "
+        "f.document_id AS document_id, "
+        "se.normalized_key AS s_key, se.canonical_name AS s_name, "
+        "se.mention_count AS s_mentions, "
+        "oe.normalized_key AS o_key, oe.canonical_name AS o_name, "
+        "oe.mention_count AS o_mentions")
+
+    def facts_for_set(self, set_id: int, min_conf: int | None = None) -> list[dict]:
+        sql = ("SELECT " + self._GRAPH_COLS + " FROM facts f "
+               "JOIN documents d ON d.id = f.document_id "
+               "JOIN entities se ON se.id = f.subject_entity_id "
+               "JOIN entities oe ON oe.id = f.object_entity_id "
+               "WHERE d.set_id = ? AND f.is_duplicate = 0")
+        params: list = [set_id]
+        if min_conf is not None:
+            sql += " AND f.confidence >= ?"
+            params.append(min_conf)
+        sql += " ORDER BY f.id"
+        return [dict(r) for r in self.conn.execute(sql, params).fetchall()]
+
+    def search_facts(self, query_vec: list[float], k: int,
+                     sets: list[int] | None = None) -> list[dict]:
+        knn_k = k if not sets else max(k * 10, 100)
+        rows = self.conn.execute(
+            "SELECT v.fact_id AS fact_id, v.distance AS distance, "
+            "f.subject AS subject, f.predicate AS predicate, f.object AS object, "
+            "f.description AS description, f.document_id AS document_id, "
+            "d.set_id AS set_id FROM vec_facts v "
+            "JOIN facts f ON f.id = v.fact_id "
+            "JOIN documents d ON d.id = f.document_id "
+            "WHERE v.embedding MATCH ? AND k = ?",
+            (sqlite_vec.serialize_float32(query_vec), knn_k)).fetchall()
+        out: list[dict] = []
+        for r in rows:
+            if sets and r["set_id"] not in sets:
+                continue
+            out.append(dict(r))
+            if len(out) >= k:
+                break
+        return out
+
+    def entities_by_key(self, normalized_key: str,
+                        sets: list[int] | None = None) -> list[dict]:
+        sql = ("SELECT e.id AS id, e.normalized_key AS normalized_key, "
+               "e.canonical_name AS canonical_name, e.document_id AS document_id, "
+               "d.set_id AS set_id FROM entities e "
+               "JOIN documents d ON d.id = e.document_id WHERE e.normalized_key = ?")
+        params: list = [normalized_key]
+        if sets:
+            sql += " AND d.set_id IN (%s)" % ",".join("?" * len(sets))
+            params += list(sets)
+        return [dict(r) for r in self.conn.execute(sql, params).fetchall()]
+
+    def entity_neighbors(self, query_vec: list[float], k: int,
+                         sets: list[int] | None = None) -> list[dict]:
+        knn_k = k if not sets else max(k * 10, 100)
+        rows = self.conn.execute(
+            "SELECT v.entity_id AS entity_id, v.distance AS distance, "
+            "e.normalized_key AS normalized_key, e.canonical_name AS canonical_name, "
+            "d.set_id AS set_id FROM vec_entities v "
+            "JOIN entities e ON e.id = v.entity_id "
+            "JOIN documents d ON d.id = e.document_id "
+            "WHERE v.embedding MATCH ? AND k = ?",
+            (sqlite_vec.serialize_float32(query_vec), knn_k)).fetchall()
+        out: list[dict] = []
+        for r in rows:
+            if sets and r["set_id"] not in sets:
+                continue
+            out.append(dict(r))
+            if len(out) >= k:
+                break
+        return out
+
+    def facts_for_entities(self, entity_ids: list[int],
+                           min_conf: int | None = None) -> list[dict]:
+        if not entity_ids:
+            return []
+        ph = ",".join("?" * len(entity_ids))
+        sql = ("SELECT " + self._GRAPH_COLS + " FROM facts f "
+               "JOIN entities se ON se.id = f.subject_entity_id "
+               "JOIN entities oe ON oe.id = f.object_entity_id "
+               "WHERE f.is_duplicate = 0 AND "
+               f"(f.subject_entity_id IN ({ph}) OR f.object_entity_id IN ({ph}))")
+        params: list = list(entity_ids) + list(entity_ids)
+        if min_conf is not None:
+            sql += " AND f.confidence >= ?"
+            params.append(min_conf)
+        sql += " ORDER BY f.id"
+        return [dict(r) for r in self.conn.execute(sql, params).fetchall()]
+
+    def get_set(self, set_id: int) -> dict | None:
+        s = self.conn.execute(
+            "SELECT * FROM source_sets WHERE id = ?", (set_id,)).fetchone()
+        if s is None:
+            return None
+        docs = self.conn.execute(
+            "SELECT id, title, source_kind, source_ref, status, total_facts, "
+            "unique_facts, duplicate_facts, created_at FROM documents "
+            "WHERE set_id = ? ORDER BY id", (set_id,)).fetchall()
+        out = dict(s)
+        out["documents"] = [dict(r) for r in docs]
+        return out
