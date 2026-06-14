@@ -313,7 +313,7 @@ def test_models_endpoint_normalises_latest_tag(tmp_path, monkeypatch):
     assert res["default"] == f"{api.cfg.llm.model}:latest"           # défaut = id réel de la liste
     assert f"{api.cfg.llm.model}:latest" in res["models"]            # le llm, lui, reste dans la liste
 
-async def test_models_endpoint_garde_le_tag_du_defaut(tmp_path, monkeypatch):
+def test_models_endpoint_garde_le_tag_du_defaut(tmp_path, monkeypatch):
     # Un défaut PORTANT déjà un tag (cas du défaut de prod mistral-...-q8_0, qui contient
     # un ':') doit ressortir tel quel : Ollama le liste exactement, rien à recoller. Protège
     # contre une régression de norm() qui casserait le défaut taggé dans la dropdown.
