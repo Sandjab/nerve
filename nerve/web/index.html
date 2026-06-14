@@ -93,23 +93,22 @@ async function loadSets(){
   sets.forEach(s=>{
     const el=document.createElement("div"); el.className="item";
     el.textContent=`${s.name} (${s.document_count})`;
-    el.onclick=()=>openSet(s.id);
+    el.onclick=()=>openSet(s.id, el);
     box.appendChild(el);
   });
 }
-async function openSet(id){
+async function openSet(id, el){
   renderGraph(await (await fetch(`/api/sets/${id}/graph`)).json());
   const detail=await (await fetch(`/api/sets/${id}`)).json();
-  const box=document.getElementById("sets");
-  const prev=box.querySelector("#setDocs"); if(prev) prev.remove();
+  const prev=document.querySelector("#setDocs"); if(prev) prev.remove();
   const sub=document.createElement("div"); sub.id="setDocs";
   detail.documents.forEach(d=>{
-    const el=document.createElement("div"); el.className="item"; el.style.paddingLeft="16px";
-    el.textContent=`· ${d.title}`;
-    el.onclick=(e)=>{ e.stopPropagation(); openDocument(d.id); };
-    sub.appendChild(el);
+    const elDoc=document.createElement("div"); elDoc.className="item"; elDoc.style.paddingLeft="16px";
+    elDoc.textContent=`· ${d.title}`;
+    elDoc.onclick=(e)=>{ e.stopPropagation(); openDocument(d.id); };
+    sub.appendChild(elDoc);
   });
-  box.appendChild(sub);
+  el.insertAdjacentElement("afterend", sub);
 }
 async function openDocument(id){
   const facts=await (await fetch(`/api/documents/${id}/facts`)).json();
