@@ -38,3 +38,14 @@ def test_fact_schema_has_kind_fields():
     props = FACT_SCHEMA["properties"]
     assert props["subject_kind"]["enum"] == ["entity", "value"]
     assert props["object_kind"]["enum"] == ["entity", "value"]
+
+def test_response_format_exige_tous_les_champs():
+    # Pourquoi : à schéma lâche (seuls subject/predicate/object requis), les modèles
+    # omettent subject_kind/object_kind/evidence_span de façon NON déterministe d'un run
+    # à l'autre (mesuré, cf. Benchmark_LLM.md). On force donc TOUS les champs côté requête
+    # pour un contrat stable — le parseur restant le filet si un provider ne l'honore pas.
+    from nerve.extract import FACT_RESPONSE_FORMAT, FACT_SCHEMA
+    js = FACT_RESPONSE_FORMAT["json_schema"]
+    assert js["strict"] is True
+    required = js["schema"]["items"]["required"]
+    assert set(required) == set(FACT_SCHEMA["properties"].keys())
