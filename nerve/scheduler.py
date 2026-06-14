@@ -2,6 +2,7 @@
 import os
 import json
 import asyncio
+import dataclasses
 from nerve.pipeline import run_extraction
 
 
@@ -64,6 +65,15 @@ class Scheduler:
             except asyncio.QueueFull:
                 pass
 
+    def _cfg_for(self, doc: dict):
+        """Config effective : modèle d'extraction surchargé si présent dans les
+        params du document, sinon cfg par défaut. Override par-document (stateless)."""
+        params = json.loads(doc.get("params_json") or "{}")
+        model = params.get("model")
+        if not model:
+            return self.cfg
+        return dataclasses.replace(self.cfg, llm=dataclasses.replace(self.cfg.llm, model=model))
+
     async def _process(self, doc_id: int) -> None:
         doc = self.store.get_document(doc_id)
         if doc is None or doc["status"] == "paused":
@@ -72,7 +82,7 @@ class Scheduler:
         ps, pc = doc["progress_segment"], doc["progress_chunk"]
         self.store.set_status(doc_id, "running")
         self.emit(doc_id, {"type": "status", "status": "running"})
-        gen = self._run(self.cfg, self.store, doc_id, segments,
+        gen = self._run(self._cfg_for(doc), self.store, doc_id, segments,
                         start_segment=ps, start_chunk=pc)
         async for ev in gen:
             self.emit(doc_id, ev)

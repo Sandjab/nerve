@@ -136,3 +136,45 @@ def test_unsubscribe_removes_empty_key(tmp_path):
     assert doc_id in sched._subs
     sched.unsubscribe(doc_id, q)
     assert doc_id not in sched._subs                 # clé vidée -> purgée
+
+
+async def _run_capturing(captured):
+    async def fake_run(cfg, store, doc_id, segments, *, start_segment=0, start_chunk=0, client=None):
+        captured["model"] = cfg.llm.model
+        store.finish_document(doc_id)
+        d = store.get_document(doc_id)
+        yield {"type": "done", "total_facts": d["total_facts"],
+               "unique_facts": d["unique_facts"], "duplicate_facts": d["duplicate_facts"]}
+    return fake_run
+
+async def _drain_until_done(sched, sub):
+    try:
+        while True:
+            ev = await asyncio.wait_for(sub.get(), timeout=2)
+            if ev.get("type") == "done":
+                break
+    finally:
+        await sched.stop()
+
+async def test_worker_applies_model_override(tmp_path):
+    captured = {}
+    st = Store(str(tmp_path / "ov.db"), embed_dim=2); st.init_db()
+    doc_id = st.create_document(st.create_set("S"), "d", "text", params={"model": "gemma4"})
+    write_segments(str(tmp_path), doc_id, [("texte", "")])
+    sched = Scheduler(load_config(), st, run=await _run_capturing(captured), data_dir=str(tmp_path))
+    sub = sched.subscribe(doc_id)
+    sched.start(); sched.enqueue(doc_id)
+    await _drain_until_done(sched, sub)
+    assert captured["model"] == "gemma4"
+
+async def test_worker_uses_default_model_without_override(tmp_path):
+    captured = {}
+    st = Store(str(tmp_path / "def.db"), embed_dim=2); st.init_db()
+    doc_id = st.create_document(st.create_set("S"), "d", "text")
+    write_segments(str(tmp_path), doc_id, [("texte", "")])
+    cfg = load_config()
+    sched = Scheduler(cfg, st, run=await _run_capturing(captured), data_dir=str(tmp_path))
+    sub = sched.subscribe(doc_id)
+    sched.start(); sched.enqueue(doc_id)
+    await _drain_until_done(sched, sub)
+    assert captured["model"] == cfg.llm.model
