@@ -67,8 +67,8 @@ async def create_document(body: CreateDoc):
 async def list_llm_models():
     try:
         models = await list_models(cfg.llm)
-    except Exception as e:                       # fail-loud, message exploitable côté UI
-        raise HTTPException(status_code=502, detail=f"Modèles indisponibles : {e}")
+    except Exception as e:                       # fail-loud : détail brut ; le front préfixe le contexte
+        raise HTTPException(status_code=502, detail=str(e))
     def norm(m):                                  # Ollama : absence de tag ≡ ':latest'
         return m if ":" in m else f"{m}:latest"
     embed = norm(cfg.embed.model)
