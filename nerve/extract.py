@@ -52,11 +52,12 @@ SYSTEM_PROMPT = (
     "« entity » = entité nommée (personne, lieu, organisation, œuvre, concept réifié) ; "
     "« value » = valeur littérale (date, nombre, mesure, durée, quantité, proportion). "
     "Ex. (Cluny, fonde, 910) -> subject_kind=entity, object_kind=value.\n\n"
-    "Pour chaque fait : title (une phrase <=140 car.), description (2-3 phrases "
-    "<=350 car. portant la réponse + preuve, citation verbatim si utile), subject, "
-    "predicate (relation snake_case précise, <=32 car.), object, evidence_span "
+    "Pour chaque fait, fournis TOUS ces champs : title (une phrase <=140 car.), "
+    "description (2-3 phrases <=350 car. portant la réponse + preuve, citation "
+    "verbatim si utile), subject, subject_kind (entity|value), predicate (relation "
+    "snake_case précise, <=32 car.), object, object_kind (entity|value), evidence_span "
     "(citation verbatim, sous-chaîne du document), confidence (0-100), tags "
-    "(minuscules, alphanumérique+tiret)."
+    "(minuscules, alphanumérique+tiret). N'omets JAMAIS subject_kind ni object_kind."
 )
 
 def build_messages(text: str, extra: str = "") -> list[dict]:
