@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>nerve — Manuel d'utilisation</title>
+<style>
+  :root{
+    --bg:#F4F6FA; --ink:#15202E; --blue:#23537F; --blue2:#2C77B6;
+    --bordeaux:#7C2A38; --green:#1C6A4C; --muted:#5b6b7e;
+    --card:#ffffff; --border:#d7dee8;
+  }
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font:16px/1.65 Georgia,"Iowan Old Style","Times New Roman",serif;
+  }
+  .wrap{max-width:880px; margin:0 auto; padding:0 24px 96px;}
+  header{
+    padding:64px 0 28px; border-bottom:3px double var(--blue); margin-bottom:8px;
+  }
+  h1{font-size:2.6rem; margin:0 0 6px; color:var(--blue); letter-spacing:.5px;}
+  .sub{font-size:1.15rem; color:var(--muted); font-style:italic; margin:0;}
+  .lead{font-size:1.05rem; margin:22px 0 0;}
+  h2{
+    font-size:1.6rem; color:var(--blue); margin:56px 0 4px;
+    padding-bottom:6px; border-bottom:1px solid var(--border);
+  }
+  h2 .n{color:var(--bordeaux); font-size:1rem; vertical-align:super; margin-right:8px;}
+  h3{font-size:1.15rem; color:var(--bordeaux); margin:28px 0 4px;}
+  p{margin:12px 0;}
+  a{color:var(--blue2);}
+  code,kbd{
+    font-family:"SF Mono",Menlo,Consolas,monospace; font-size:.88em;
+    background:#eaeef5; padding:1px 6px; border-radius:4px; color:#28435f;
+  }
+  kbd{border:1px solid #c2cddc; box-shadow:0 1px 0 #c2cddc;}
+  figure{margin:22px 0 8px;}
+  figure img{
+    width:100%; display:block; border:1px solid var(--border); border-radius:8px;
+    box-shadow:0 6px 22px rgba(35,83,127,.13);
+  }
+  figcaption{
+    font-size:.9rem; color:var(--muted); font-style:italic;
+    text-align:center; margin-top:10px;
+  }
+  ul,ol{margin:12px 0; padding-left:22px;}
+  li{margin:5px 0;}
+  .toc{
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    padding:18px 26px; margin:28px 0 0;
+  }
+  .toc strong{color:var(--blue); display:block; margin-bottom:8px; font-size:.95rem;
+    text-transform:uppercase; letter-spacing:1px;}
+  .toc ol{columns:2; column-gap:36px; margin:0;}
+  .legend-key{display:inline-block; width:13px; height:13px; border-radius:50%;
+    vertical-align:middle; margin-right:5px; border:1px solid rgba(0,0,0,.15);}
+  .note{
+    background:#eef3f9; border-left:4px solid var(--blue2); border-radius:0 8px 8px 0;
+    padding:12px 18px; margin:20px 0; font-size:.96rem;
+  }
+  table{border-collapse:collapse; width:100%; margin:16px 0; font-size:.92rem;
+    font-family:system-ui,sans-serif;}
+  th,td{border:1px solid var(--border); padding:7px 11px; text-align:left;}
+  th{background:#eaeef5; color:var(--blue);}
+  footer{margin-top:64px; padding-top:22px; border-top:3px double var(--blue);
+    color:var(--muted); font-size:.92rem;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>nerve</h1>
+  <p class="sub">Named Entity Relation Visualizer &amp; Extractor — manuel d'utilisation</p>
+  <p class="lead">
+    <strong>nerve</strong> transforme un texte, des fichiers ou des pages web en un
+    <em>graphe de connaissances</em> navigable : un modèle de langage en extrait des faits
+    <code>sujet — relation — objet</code>, les entités équivalentes sont fusionnées, les faits
+    redondants écartés, et l'ensemble s'explore dans une page interactive. Tout fonctionne
+    <strong>localement</strong> sur votre machine. Ce manuel parcourt l'interface, fonctionnalité
+    par fonctionnalité. Les copies d'écran utilisent un petit corpus de démonstration
+    (l'abbaye de Cluny et la réforme grégorienne).
+  </p>
+  <div class="toc">
+    <strong>Sommaire</strong>
+    <ol>
+      <li><a href="#interface">L'interface en un coup d'œil</a></li>
+      <li><a href="#extraire">Extraire un graphe</a></li>
+      <li><a href="#niveaux">Naviguer : Document, Set, Transverse</a></li>
+      <li><a href="#lire">Lire le graphe : couleur &amp; taille</a></li>
+      <li><a href="#etiquettes">Étiquettes d'arêtes</a></li>
+      <li><a href="#carte">Carte de fait au survol</a></li>
+      <li><a href="#passerelles">Passerelles transverses</a></li>
+      <li><a href="#recherche">Recherche sémantique</a></li>
+      <li><a href="#theme">Thème clair &amp; sombre</a></li>
+    </ol>
+  </div>
+</header>
+
+<h2 id="interface"><span class="n">1</span>L'interface en un coup d'œil</h2>
+<p>
+  L'écran se découpe en trois zones&nbsp;: en haut, la <strong>barre d'extraction</strong> (un champ
+  pour coller du texte et le bouton <kbd>Extraire</kbd>)&nbsp;; à gauche, la <strong>barre latérale</strong>
+  (recherche, vue transverse, et la liste des <em>sets</em>)&nbsp;; au centre, le <strong>graphe</strong>
+  surmonté de ses contrôles d'affichage (couleur, taille, étiquettes, chemin, thème) et accompagné
+  d'une légende dynamique. Chaque nœud porte le nom de son entité (le libellé apparaît dès qu'on
+  zoome suffisamment) ; survoler un nœud ou une arête révèle davantage de détails.
+</p>
+<figure>
+  <img src="img/02-graphe-set.png" alt="Vue d'ensemble de l'interface de nerve avec le graphe d'un set">
+  <figcaption>Le graphe du set « Abbaye de Cluny ». Le nœud central, le plus connecté, est aussi
+  le plus gros&nbsp;: c'est l'entité <em>Cluny</em>, partagée par les deux documents du set et
+  fusionnée en un seul nœud.</figcaption>
+</figure>
+
+<h2 id="extraire"><span class="n">2</span>Extraire un graphe</h2>
+<p>
+  Collez un texte dans le champ du haut puis cliquez sur <kbd>Extraire</kbd>. nerve découpe le
+  texte, l'envoie au modèle de langage, et <strong>affiche les faits au fur et à mesure</strong>
+  qu'ils sont produits (flux temps réel)&nbsp;: le graphe se construit sous vos yeux. Chaque fait
+  relie un sujet à un objet par un prédicat.
+</p>
+<figure>
+  <img src="img/01-extraction-live.png" alt="Graphe extrait d'un paragraphe sur la réforme grégorienne">
+  <figcaption>Le texte collé en haut est transformé en graphe&nbsp;: on y lit que la
+  <em>réforme grégorienne</em>, menée par <em>Grégoire&nbsp;VII</em>, combat la <em>simonie</em> et
+  déclenche la <em>querelle des Investitures</em>, laquelle oppose <em>Henri&nbsp;IV</em> — qui
+  s'humilie à <em>Canossa</em> en 1077.</figcaption>
+</figure>
+<div class="note">
+  Au-delà du texte collé, on peut aussi soumettre une <strong>URL</strong> (la page est transcodée
+  en texte) ou des <strong>fichiers</strong> PDF, DOCX, HTML et archives ZIP. Plusieurs extractions
+  s'enchaînent dans une file d'attente&nbsp;; chacune peut être mise en pause puis reprise sans
+  reperdre le travail déjà accompli.
+</div>
+
+<h2 id="niveaux"><span class="n">3</span>Naviguer : Document, Set, Transverse</h2>
+<p>
+  nerve organise la connaissance sur <strong>trois niveaux</strong>, du plus fin au plus large&nbsp;:
+</p>
+<ul>
+  <li><strong>Document</strong> — le graphe d'une seule source. Cliquez un document sous son set
+  dans la barre latérale.</li>
+  <li><strong>Set</strong> — une collection de documents. Les entités identiques d'un document à
+  l'autre sont <em>fusionnées</em> (« collapse ») en un nœud unique&nbsp;: dans le set « Abbaye de
+  Cluny », l'entité <em>Cluny</em>, mentionnée par les deux documents, n'apparaît qu'une fois.</li>
+  <li><strong>Transverse</strong> — un sous-graphe centré sur une entité, qui traverse <em>tous</em>
+  les sets pour révéler ce qui relie des corpus distincts (voir la section
+  <a href="#passerelles">Passerelles</a>).</li>
+</ul>
+<p>
+  Cliquer sur un set en affiche le graphe et déroule la liste de ses documents juste en dessous.
+</p>
+
+<h2 id="lire"><span class="n">4</span>Lire le graphe : couleur &amp; taille</h2>
+<p>
+  Le menu <strong>Couleur</strong> propose quatre lectures du même graphe&nbsp;:
+</p>
+<ul>
+  <li><strong>Communauté</strong> — les groupes d'entités fortement liées (détection automatique
+  par l'algorithme de Louvain) reçoivent chacun une couleur. Pratique pour repérer les
+  « familles » de concepts.</li>
+  <li><strong>Set</strong> — chaque set sa couleur&nbsp;; les entités présentes dans plusieurs sets
+  (les <em>hubs</em>) ressortent en bordeaux.</li>
+  <li><strong>Type</strong> — distingue les <em>entités</em> (personnes, lieux, institutions…) des
+  <em>valeurs</em> (dates, quantités).</li>
+  <li><strong>Uniforme</strong> — une seule teinte, pour se concentrer sur la structure des liens
+  sans information de couleur.</li>
+</ul>
+<p>
+  Le menu <strong>Taille</strong> fait varier le diamètre des nœuds selon leur
+  <em>centralité</em> (nombre de connexions, par défaut), leur nombre de <em>mentions</em>, ou
+  une taille <em>fixe</em>. La légende, en bas du graphe, s'adapte au mode choisi.
+</p>
+<figure>
+  <img src="img/03-couleur-type.png" alt="Le graphe coloré par type, distinguant entités et valeurs">
+  <figcaption>Mode <strong>Type</strong>&nbsp;: les valeurs (les dates <em>910</em>, les quantités
+  « soixante&nbsp;ans », « mille&nbsp;monastères ») se détachent en gris des entités, en bleu.</figcaption>
+</figure>
+
+<h2 id="etiquettes"><span class="n">5</span>Étiquettes d'arêtes</h2>
+<p>
+  Le bouton <kbd>étiquettes</kbd> inscrit le <strong>prédicat</strong> de chaque relation
+  directement sur le lien correspondant. C'est la façon la plus directe de lire le graphe comme une
+  suite de phrases <code>sujet — relation — objet</code>. L'épaisseur d'un lien reflète par
+  ailleurs la <em>confiance</em> attribuée au fait.
+</p>
+<figure>
+  <img src="img/04-etiquettes.png" alt="Le graphe du set avec les prédicats affichés sur les arêtes">
+  <figcaption>Étiquettes activées&nbsp;: <em>fondée en</em>, <em>dirigée par</em>, <em>rayonne sur</em>,
+  <em>située en</em>, <em>premier abbé de</em>… chaque arête énonce sa relation.</figcaption>
+</figure>
+
+<h2 id="carte"><span class="n">6</span>Carte de fait au survol</h2>
+<p>
+  Survolez un lien avec la souris pour afficher une <strong>carte de fait</strong>&nbsp;: elle rappelle
+  le triplet complet et le degré de <em>confiance</em> du fait. Idéal pour inspecter une relation
+  précise sans encombrer le graphe.
+</p>
+<figure>
+  <img src="img/05-carte-fait.png" alt="Carte de fait affichée au survol d'une arête">
+  <figcaption>Au survol de l'arête entre <em>Cluny</em> et <em>Hugues de Semur</em>&nbsp;: la carte
+  affiche « Cluny — dirigée par — Hugues de Semur », avec une confiance de 91&nbsp;%.</figcaption>
+</figure>
+
+<h2 id="passerelles"><span class="n">7</span>Passerelles transverses</h2>
+<p>
+  Saisissez le nom d'une entité dans le champ <strong>Transverse</strong> puis cliquez
+  <kbd>Sous-graphe</kbd>. nerve rassemble cette entité et son voisinage <em>à travers tous les
+  sets</em>. Lorsqu'une entité relie deux corpus distincts, elle devient un <strong>hub</strong>
+  (en bordeaux) et les liens qui en partent sont des <strong>passerelles</strong> — les chemins par
+  lesquels une connaissance d'un domaine en rejoint un autre.
+</p>
+<figure>
+  <img src="img/06-transverse-passerelles.png" alt="Vue transverse centrée sur Cluny, avec les passerelles en bordeaux">
+  <figcaption>Vue transverse sur <em>Cluny</em>, colorée par set. Cluny (hub bordeaux) relie le set
+  « Abbaye de Cluny » (en vert) au set « Réforme grégorienne »&nbsp;: les arêtes bordeaux sont les
+  passerelles entre les deux corpus.</figcaption>
+</figure>
+
+<h2 id="recherche"><span class="n">8</span>Recherche sémantique</h2>
+<p>
+  Le champ <strong>Recherche</strong> ne cherche pas des mots-clés mais du <em>sens</em>&nbsp;: la
+  requête est comparée aux faits par similarité vectorielle. Vous pouvez donc poser une question en
+  langage naturel et obtenir les faits les plus proches, classés par pertinence — même si aucun mot
+  exact ne correspond.
+</p>
+<figure>
+  <img src="img/07-recherche.png" alt="Résultats d'une recherche sémantique dans la barre latérale">
+  <figcaption>La question « Qui a fondé l'abbaye de Cluny&nbsp;? » place en tête le fait
+  <em>Cluny — fondée par — Guillaume Ier d'Aquitaine</em>, suivi des autres faits pertinents.</figcaption>
+</figure>
+
+<h2 id="theme"><span class="n">9</span>Thème clair &amp; sombre</h2>
+<p>
+  Le bouton <kbd>☾</kbd> / <kbd>☀</kbd> bascule entre thème clair et thème sombre. Le choix est
+  mémorisé d'une session à l'autre.
+</p>
+<figure>
+  <img src="img/08-theme-sombre.png" alt="Le graphe du set en thème sombre">
+  <figcaption>Le même graphe en thème sombre.</figcaption>
+</figure>
+
+<footer>
+  <p>
+    Pour l'installation, la configuration (modèles, seuils, transcodeurs) et l'architecture, voyez le
+    <a href="../README.md">README</a> et le fichier <a href="../CLAUDE.md">CLAUDE.md</a> à la racine
+    du projet. nerve est un logiciel libre sous licence <a href="../LICENSE">MIT</a>.
+  </p>
+</footer>
+
+</div>
+</body>
+</html>
