@@ -128,6 +128,9 @@ class Store:
             d["tags"] = json.loads(d.pop("tags_json") or "[]")
             d["subject_canonical"] = d.get("subject_canonical") or d["subject"]
             d["object_canonical"] = d.get("object_canonical") or d["object"]
+            # PK SQLite internes (cf. #9) : sans sens côté client, non exposées.
+            d.pop("subject_entity_id", None)
+            d.pop("object_entity_id", None)
             out.append(d)
         return out
 
