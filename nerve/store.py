@@ -41,6 +41,8 @@ CREATE TABLE IF NOT EXISTS entities (
   created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_facts_doc ON facts(document_id);
+CREATE INDEX IF NOT EXISTS idx_facts_subject ON facts(subject_entity_id);
+CREATE INDEX IF NOT EXISTS idx_facts_object ON facts(object_entity_id);
 CREATE INDEX IF NOT EXISTS idx_entities_doc_key ON entities(document_id, normalized_key);
 """
 
