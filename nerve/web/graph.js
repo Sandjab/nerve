@@ -175,6 +175,7 @@ function longestPath(data){
   let visits = 0, truncated = false;
   function dfs(node, seen, path){
     if(path.length > best.length) best = path.slice();
+    if(best.length >= adj.size) return;            // chemin couvrant tous les nœuds : impossible de faire mieux
     let n = 0;
     for(const nb of adj.get(node)){
       if(seen.has(nb)) continue;
@@ -182,7 +183,7 @@ function longestPath(data){
       if(++visits > VISIT_BUDGET){ truncated = true; return; }   // budget global épuisé -> on garde le meilleur trouvé
       seen.add(nb); path.push(nb); dfs(nb, seen, path);
       path.pop(); seen.delete(nb);
-      if(truncated) return;                        // remonter sans poursuivre l'exploration
+      if(truncated || best.length >= adj.size) return;   // remonter sans poursuivre l'exploration
     }
   }
   for(const start of order.slice(0, 8)){
