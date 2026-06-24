@@ -1,4 +1,5 @@
 # tests/test_vecutil.py
+import pytest
 from nerve.vecutil import dot
 
 def test_dot_est_le_produit_scalaire():
@@ -10,3 +11,10 @@ def test_dot_de_vecteur_normalise_avec_lui_meme_vaut_un():
     # EST le cosinus, mesure de similarité des gardes fusion (entities) / dedup.
     v = [0.6, 0.8]   # norme 1
     assert abs(dot(v, v) - 1.0) < 1e-12
+
+def test_dot_leve_si_dimensions_differentes():
+    # fail-loud : zip tronquerait silencieusement au plus court vecteur et
+    # fausserait le cosinus ; une divergence de dimension signale un bug
+    # (modèle/config d'embedding) et doit remonter, pas être masquée.
+    with pytest.raises(ValueError):
+        dot([1.0, 2.0], [1.0, 2.0, 3.0])
