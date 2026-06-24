@@ -1,4 +1,6 @@
 # nerve/dedup.py
+from nerve.vecutil import dot
+
 def dedup_text(fact: dict, field: str = "triple") -> str:
     s, p, o = fact.get("subject", ""), fact.get("predicate", ""), fact.get("object", "")
     t, d = fact.get("title", ""), fact.get("description", "")
@@ -11,9 +13,6 @@ def dedup_text(fact: dict, field: str = "triple") -> str:
     if field == "all":
         return f"{t} {d} {s} {p} {o}".strip()
     return f"{s} {p} {o}".strip()   # défaut : triple
-
-def _dot(a: list[float], b: list[float]) -> float:
-    return sum(x * y for x, y in zip(a, b))
 
 class FactDeduper:
     """Dedup intra-document de faits : working set en mémoire (vecteurs normalisés),
@@ -30,7 +29,7 @@ class FactDeduper:
         vec = await self.embed_fn(dedup_text(fact, self.field))
         best_id, best_sim = None, 0.0
         for fid, fvec in self._retained:
-            sim = _dot(vec, fvec)
+            sim = dot(vec, fvec)
             if sim > best_sim:
                 best_id, best_sim = fid, sim
         if best_sim >= self.threshold:
