@@ -171,20 +171,27 @@ function longestPath(data){
   const order = [...adj.keys()].sort((x, y) => adj.get(y).size - adj.get(x).size);
   let best = [];
   const CAP = 6;                                  // fanout plafonné (anti-explosion)
+  const VISIT_BUDGET = 20000;                     // borne dure : profondeur non bornée -> DFS exponentiel sur graphe dense
+  let visits = 0, truncated = false;
   function dfs(node, seen, path){
     if(path.length > best.length) best = path.slice();
+    if(best.length >= adj.size) return;            // chemin couvrant tous les nœuds : impossible de faire mieux
     let n = 0;
     for(const nb of adj.get(node)){
       if(seen.has(nb)) continue;
       if(++n > CAP) break;
+      if(++visits > VISIT_BUDGET){ truncated = true; return; }   // budget global épuisé -> on garde le meilleur trouvé
       seen.add(nb); path.push(nb); dfs(nb, seen, path);
       path.pop(); seen.delete(nb);
+      if(truncated || best.length >= adj.size) return;   // remonter sans poursuivre l'exploration
     }
   }
   for(const start of order.slice(0, 8)){
     dfs(start, new Set([start]), [start]);
-    if(best.length >= adj.size) break;
+    if(best.length >= adj.size || truncated) break;
   }
+  if(truncated)
+    console.warn(`longestPath : budget de ${VISIT_BUDGET} nœuds visités atteint — chemin tronqué (longueur ${best.length}).`);
   const keys = new Set();
   for(let i = 0; i + 1 < best.length; i++)
     keys.add(best[i] + "\u0001" + best[i+1]).add(best[i+1] + "\u0001" + best[i]);
