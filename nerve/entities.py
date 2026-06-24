@@ -3,6 +3,8 @@ import re
 import unicodedata
 from collections import Counter
 
+from nerve.vecutil import dot
+
 def normalized_key(name: str) -> str:
     """Clé déterministe : sans accents, casefold, [_\\W]+ -> espace, espaces normalisés."""
     s = unicodedata.normalize("NFKD", name or "")
@@ -27,9 +29,6 @@ def lexical_guard(key_a: str, key_b: str) -> bool:
         return True
     flat_a, flat_b = key_a.replace(" ", ""), key_b.replace(" ", "")
     return _acronym(key_a) == flat_b or _acronym(key_b) == flat_a
-
-def _dot(a: list[float], b: list[float]) -> float:
-    return sum(x * y for x, y in zip(a, b))
 
 class EntityResolver:
     """Résolution d'entités intra-document : clé lexicale puis garde hybride
@@ -85,7 +84,7 @@ class EntityResolver:
     def _match(self, key: str, vec: list[float]) -> int | None:
         best_eid, best_sim = None, 0.0
         for eid, evec, ekey in self._entities:
-            sim = _dot(vec, evec)
+            sim = dot(vec, evec)
             if sim >= self.threshold and lexical_guard(key, ekey) and sim > best_sim:
                 best_eid, best_sim = eid, sim
         return best_eid
