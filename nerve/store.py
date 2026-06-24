@@ -116,7 +116,12 @@ class Store:
     def get_facts(self, document_id: int, include_duplicates: bool = False) -> list[dict]:
         where = "" if include_duplicates else " AND f.is_duplicate = 0"
         rows = self.conn.execute(
-            "SELECT f.*, se.canonical_name AS subject_canonical, "
+            # Colonnes listées explicitement (cf. #9) : les PK internes
+            # subject_entity_id / object_entity_id ne sont pas exposées au client.
+            "SELECT f.id, f.document_id, f.subject, f.predicate, f.object, "
+            "f.title, f.description, f.evidence_span, f.confidence, f.tags_json, "
+            "f.source_file, f.is_duplicate, f.dup_of_id, f.created_at, "
+            "se.canonical_name AS subject_canonical, "
             "oe.canonical_name AS object_canonical FROM facts f "
             "LEFT JOIN entities se ON se.id = f.subject_entity_id "
             "LEFT JOIN entities oe ON oe.id = f.object_entity_id "

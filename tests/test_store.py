@@ -65,6 +65,23 @@ def test_add_fact_counts_and_entities(tmp_path):
     assert len(facts) == 1
     assert facts[0]["subject_canonical"] == "A"  # nom canonique via l'entité
 
+def test_get_facts_n_expose_pas_les_entity_ids_internes(tmp_path):
+    # subject_entity_id / object_entity_id sont des PK SQLite internes, sans
+    # sens côté client ; get_facts ne doit pas les fuiter (libellés + *_canonical
+    # suffisent au front). Régresse si on revient à un SELECT f.* brut non filtré.
+    st = Store(str(tmp_path / "ids.db"), embed_dim=4)
+    st.init_db()
+    set_id = st.create_set("S"); doc_id = st.create_document(set_id, "d", "text")
+    e1 = st.create_entity(doc_id, "A", "a"); e2 = st.create_entity(doc_id, "B", "b")
+    st.add_fact(doc_id, {"subject": "A", "predicate": "r", "object": "B"},
+                subject_entity_id=e1, object_entity_id=e2)
+    fact = st.get_facts(doc_id)[0]
+    assert "subject_entity_id" not in fact
+    assert "object_entity_id" not in fact
+    # champs utiles au client conservés
+    assert fact["subject"] == "A" and fact["object"] == "B"
+    assert fact["subject_canonical"] == "A" and fact["object_canonical"] == "B"
+
 def test_get_facts_can_include_duplicates(tmp_path):
     st = Store(str(tmp_path / "d.db"), embed_dim=4)
     st.init_db()
