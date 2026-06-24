@@ -24,6 +24,17 @@ def test_sqlite_vec_loads(tmp_path):
     cur = st.conn.execute("SELECT name FROM sqlite_master WHERE name='vec_facts'")
     assert cur.fetchone() is not None
 
+def test_facts_entity_ids_sont_indexes(tmp_path):
+    # subject_entity_id / object_entity_id sont filtrés (facts_for_entities : IN)
+    # et joints (get_facts, facts_for_set) ; sans index -> scan complet de facts.
+    # Cohérent avec idx_facts_doc déjà posé sur la FK document_id.
+    st = Store(str(tmp_path / "idx.db"), embed_dim=4)
+    st.init_db()
+    names = {r["name"] for r in st.conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='index'").fetchall()}
+    assert "idx_facts_subject" in names
+    assert "idx_facts_object" in names
+
 def test_entities_crud_and_vectors(tmp_path):
     st = Store(str(tmp_path / "e.db"), embed_dim=4)
     st.init_db()
