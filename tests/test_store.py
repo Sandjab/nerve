@@ -250,15 +250,14 @@ def test_graph_cols_expose_kind_and_set(tmp_path):
     r1 = st.facts_for_entities([se])[0]
     assert r1["set_id"] == s and r1["s_kind"] == "entity" and r1["fact_id"] == f
 
-def test_entity_kind_default_and_promote(tmp_path):
+def test_entity_kind_vote_majoritaire(tmp_path):
     st = Store(str(tmp_path / "kind.db"), embed_dim=3); st.init_db()
-    d = st.create_document(st.create_set("S"), "doc", "text")
+    d = st.create_document(st.create_set("S"), "d", "text")
     def kind_of(eid):
         return st.conn.execute("SELECT kind FROM entities WHERE id=?", (eid,)).fetchone()[0]
-    e_def = st.create_entity(d, "Cluny", "cluny")               # défaut -> entity
-    e_val = st.create_entity(d, "910", "910", kind="value")     # explicite value
-    assert kind_of(e_def) == "entity" and kind_of(e_val) == "value"
-    st.promote_entity_kind(e_val)                               # value -> entity (idempotent)
-    assert kind_of(e_val) == "entity"
-    st.promote_entity_kind(e_def)                               # déjà entity -> no-op
-    assert kind_of(e_def) == "entity"
+    e = st.create_entity(d, "Cluny", "cluny", kind="organisation")
+    assert kind_of(e) == "organisation"                 # 1er vote
+    st.vote_entity_kind(e, "lieu")                       # 1-1 : tie-break ordre -> lieu
+    assert kind_of(e) == "lieu"
+    st.vote_entity_kind(e, "organisation")              # organisation 2, lieu 1
+    assert kind_of(e) == "organisation"

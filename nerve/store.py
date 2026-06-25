@@ -1,6 +1,7 @@
 # nerve/store.py
 import os
 import json
+from nerve.kinds import DEFAULT_KIND, winner
 import sqlite3
 import sqlite_vec
 import numpy as np
@@ -37,7 +38,8 @@ CREATE TABLE IF NOT EXISTS entities (
   document_id INTEGER REFERENCES documents(id),
   canonical_name TEXT NOT NULL, normalized_key TEXT NOT NULL,
   mention_count INTEGER DEFAULT 1,
-  kind TEXT DEFAULT 'entity',
+  kind TEXT DEFAULT 'concept',
+  kind_votes TEXT DEFAULT '{}',
   created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_facts_doc ON facts(document_id);
@@ -168,10 +170,11 @@ class Store:
         return [r["id"] for r in rows]
 
     def create_entity(self, document_id: int, canonical_name: str,
-                      normalized_key: str, kind: str = "entity") -> int:
+                      normalized_key: str, kind: str = DEFAULT_KIND) -> int:
         cur = self.conn.execute(
-            "INSERT INTO entities(document_id, canonical_name, normalized_key, kind) "
-            "VALUES (?, ?, ?, ?)", (document_id, canonical_name, normalized_key, kind))
+            "INSERT INTO entities(document_id, canonical_name, normalized_key, kind, kind_votes) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (document_id, canonical_name, normalized_key, kind, json.dumps({kind: 1})))
         self.conn.commit()
         return cur.lastrowid
 
@@ -180,6 +183,18 @@ class Store:
         self.conn.execute(
             "UPDATE entities SET kind = 'entity' WHERE id = ? AND kind = 'value'",
             (entity_id,))
+        self.conn.commit()
+
+    def vote_entity_kind(self, entity_id: int, categorie: str) -> None:
+        """Ajoute une voix pour `categorie` et recalcule kind = catégorie majoritaire
+        (tie-break par ordre de la taxonomie). Fail-loud si l'état est illisible."""
+        row = self.conn.execute(
+            "SELECT kind_votes FROM entities WHERE id = ?", (entity_id,)).fetchone()
+        votes = json.loads(row["kind_votes"])          # lève si absent/illisible (fail-loud)
+        votes[categorie] = votes.get(categorie, 0) + 1
+        self.conn.execute(
+            "UPDATE entities SET kind = ?, kind_votes = ? WHERE id = ?",
+            (winner(votes), json.dumps(votes), entity_id))
         self.conn.commit()
 
     def find_entity_by_key(self, document_id: int, normalized_key: str) -> int | None:
