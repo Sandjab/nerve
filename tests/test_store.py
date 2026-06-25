@@ -94,6 +94,21 @@ def test_get_facts_n_expose_pas_les_entity_ids_internes(tmp_path):
     assert fact["subject"] == "A" and fact["object"] == "B"
     assert fact["subject_canonical"] == "A" and fact["object_canonical"] == "B"
 
+def test_get_facts_expose_le_kind_des_entites(tmp_path):
+    # le graphe document (front addFact) colore par catégorie -> get_facts doit
+    # exposer le kind résolu des entités, sinon les nœuds n'ont pas de kind et le
+    # mode « Type » est uniforme (cf. smoke #11).
+    st = Store(str(tmp_path / "gk.db"), embed_dim=4)
+    st.init_db()
+    set_id = st.create_set("S"); doc_id = st.create_document(set_id, "d", "text")
+    se = st.create_entity(doc_id, "Cluny", "cluny", kind="organisation")
+    oe = st.create_entity(doc_id, "910", "910", kind="date")
+    st.add_fact(doc_id, {"subject": "Cluny", "predicate": "fonde_en", "object": "910"},
+                subject_entity_id=se, object_entity_id=oe)
+    fact = st.get_facts(doc_id)[0]
+    assert fact["subject_kind"] == "organisation"
+    assert fact["object_kind"] == "date"
+
 def test_get_facts_can_include_duplicates(tmp_path):
     st = Store(str(tmp_path / "d.db"), embed_dim=4)
     st.init_db()

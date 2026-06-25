@@ -281,8 +281,8 @@ function addFact(f){
   if(!s || !o) return;
   // idempotent : préserver l'objet-nœud existant (sa référence est déjà liée aux arêtes
   // résolues par force-graph et porte ses coordonnées) ; le recréer désancrerait les liens.
-  if(!nodes.has(s)) nodes.set(s, {id:s});
-  if(!nodes.has(o)) nodes.set(o, {id:o});
+  if(!nodes.has(s)) nodes.set(s, {id:s, kind:f.subject_kind});
+  if(!nodes.has(o)) nodes.set(o, {id:o, kind:f.object_kind});
   const k = s + "\u0001" + (f.predicate || "") + "\u0001" + o;
   if(linkKeys.has(k)) return;
   linkKeys.add(k);

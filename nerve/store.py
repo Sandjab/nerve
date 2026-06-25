@@ -125,8 +125,8 @@ class Store:
             "SELECT f.id, f.document_id, f.subject, f.predicate, f.object, "
             "f.title, f.description, f.evidence_span, f.confidence, f.tags_json, "
             "f.source_file, f.is_duplicate, f.dup_of_id, f.created_at, "
-            "se.canonical_name AS subject_canonical, "
-            "oe.canonical_name AS object_canonical FROM facts f "
+            "se.canonical_name AS subject_canonical, se.kind AS subject_kind, "
+            "oe.canonical_name AS object_canonical, oe.kind AS object_kind FROM facts f "
             "LEFT JOIN entities se ON se.id = f.subject_entity_id "
             "LEFT JOIN entities oe ON oe.id = f.object_entity_id "
             "WHERE f.document_id = ?" + where + " ORDER BY f.id",
