@@ -140,7 +140,7 @@ Change `create_entity` to seed the vote (current signature uses `kind: str = "en
         return cur.lastrowid
 ```
 
-Replace `promote_entity_kind` entirely with `vote_entity_kind`:
+Add `vote_entity_kind` **next to** `promote_entity_kind` (do NOT remove `promote_entity_kind` yet — `entities.py` still calls it until Task 5, which removes it):
 
 ```python
     def vote_entity_kind(self, entity_id: int, categorie: str) -> None:
@@ -158,8 +158,8 @@ Replace `promote_entity_kind` entirely with `vote_entity_kind`:
 
 - [ ] **Step 4: Run test to verify it passes**
 
-Run: `uv run pytest tests/test_store.py -q`
-Expected: PASS (other store tests still green; old `test_entity_kind_default_and_promote` is gone)
+Run: `uv run pytest -q` (full suite — `promote_entity_kind` kept, so `entities`/`pipeline` stay green)
+Expected: PASS (old `test_entity_kind_default_and_promote` replaced by the vote test; `promote_entity_kind` still present and used by `entities.py`)
 
 - [ ] **Step 5: Commit**
 
@@ -291,6 +291,7 @@ git commit -m "feat(pipeline): _kind normalise vers la taxonomie catégorielle (
 
 **Files:**
 - Modify: `nerve/entities.py` (`resolve`)
+- Modify: `nerve/store.py` (supprimer `promote_entity_kind`, devenu code mort)
 - Test: `tests/test_entities.py` (remplacer `test_resolver_assigns_and_promotes_kind` + son mock `promote_entity_kind`)
 
 - [ ] **Step 1: Write the failing test** — remplace le test promotion (lignes 57, 65-76)
@@ -337,6 +338,8 @@ appears twice (clé déjà connue, et match embedding). Replace **both** with an
 ```
 
 (La création initiale via `create_entity` sème déjà le premier vote ; ne pas re-voter dans la branche `eid is None`.)
+
+Puis, dans `nerve/store.py`, **supprime** la méthode `promote_entity_kind` (plus aucun appelant). Vérifie d'abord qu'il ne reste aucune référence : `grep -rn promote_entity_kind nerve/ tests/` doit ne plus rien renvoyer après l'édition.
 
 - [ ] **Step 4: Run test to verify it passes**
 
