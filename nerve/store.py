@@ -248,6 +248,8 @@ class Store:
     _GRAPH_COLS = (
         "f.id AS fact_id, f.predicate AS predicate, f.confidence AS confidence, "
         "f.document_id AS document_id, d.set_id AS set_id, "
+        "se.id AS s_entity_id, oe.id AS o_entity_id, "
+        "se.kind_votes AS s_votes, oe.kind_votes AS o_votes, "
         "se.normalized_key AS s_key, se.canonical_name AS s_name, "
         "se.mention_count AS s_mentions, se.kind AS s_kind, "
         "oe.normalized_key AS o_key, oe.canonical_name AS o_name, "
