@@ -23,6 +23,15 @@ const CB = {comm:["#0072B2","#009E73","#E69F00","#CC79A7","#56B4E9","#F0E442"],
 let palette = localStorage.getItem("nerve-palette") || "default";
 const cc = () => palette === "cb" ? CB : T();
 
+// catégories de nœud (#11) : mapping fixe catégorie -> teinte de la palette active
+const CAT_ORDER = ["personne","lieu","organisation","concept","date","quantite"];
+const CAT_LABELS = {personne:"Personne", lieu:"Lieu", organisation:"Organisation",
+                    concept:"Concept", date:"Date", quantite:"Quantité"};
+const catColor = (kind) => {
+  const i = CAT_ORDER.indexOf(kind);
+  return i < 0 ? cc().node : cc().comm[i % cc().comm.length];
+};
+
 // indicateur d'extraction : bouton désactivé pendant le flux + confirmation de fin
 const goBtn = document.getElementById("go");
 const statusBox = document.getElementById("status");
@@ -83,7 +92,7 @@ const linkKey = (l) => (l.source.id||l.source) + "\u0001" + (l.target.id||l.targ
 function nodeColor(n){
   if(pathKeys.size && n._inPath) return "#D6A84E";
   if(colorMode === "uniform") return cc().node;
-  if(colorMode === "type") return n.kind === "value" ? cc().value : cc().node;
+  if(colorMode === "type") return catColor(n.kind);
   if(colorMode === "set"){
     const s = n.sets || [];
     if(s.length > 1) return cc().bridge;          // hub multi-sets
@@ -226,8 +235,7 @@ function renderLegend(){
   const data = G.graphData();
   if(colorMode === "type"){
     title.textContent = "Type"; box.appendChild(title);
-    box.appendChild(legendRow(cc().node, "entité"));
-    box.appendChild(legendRow(cc().value, "valeur"));
+    CAT_ORDER.forEach(k => box.appendChild(legendRow(catColor(k), CAT_LABELS[k])));
   }else if(colorMode === "set"){
     title.textContent = "Sets"; box.appendChild(title);
     const sets = [...new Set(data.nodes.flatMap(n => n.sets || []))].sort((a,b)=>a-b);
