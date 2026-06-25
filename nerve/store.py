@@ -183,7 +183,9 @@ class Store:
         (tie-break par ordre de la taxonomie). Fail-loud si l'état est illisible."""
         row = self.conn.execute(
             "SELECT kind_votes FROM entities WHERE id = ?", (entity_id,)).fetchone()
-        votes = json.loads(row["kind_votes"])          # lève si absent/illisible (fail-loud)
+        if row is None:                                # fail-loud : entité inexistante = invariant violé
+            raise ValueError(f"vote_entity_kind : entité {entity_id} introuvable")
+        votes = json.loads(row["kind_votes"])          # lève si illisible (fail-loud)
         votes[categorie] = votes.get(categorie, 0) + 1
         self.conn.execute(
             "UPDATE entities SET kind = ?, kind_votes = ? WHERE id = ?",

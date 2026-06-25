@@ -1,4 +1,5 @@
 # tests/test_store.py
+import pytest
 from nerve.store import Store
 
 def test_create_and_read_facts(tmp_path):
@@ -273,3 +274,10 @@ def test_entity_kind_vote_majoritaire(tmp_path):
     assert kind_of(e) == "lieu"
     st.vote_entity_kind(e, "organisation")              # organisation 2, lieu 1
     assert kind_of(e) == "organisation"
+
+def test_vote_entity_kind_leve_si_entite_inconnue(tmp_path):
+    # fail-loud : voter pour un entity_id inexistant = invariant violé (bug) ;
+    # l'erreur doit remonter clairement, pas être avalée (revue Gemini #24).
+    st = Store(str(tmp_path / "v.db"), embed_dim=3); st.init_db()
+    with pytest.raises(ValueError):
+        st.vote_entity_kind(999, "personne")

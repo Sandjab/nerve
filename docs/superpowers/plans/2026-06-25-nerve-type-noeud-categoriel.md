@@ -38,7 +38,7 @@ def test_winner_argmax_avec_tie_break_par_ordre():
     assert winner({"personne": 3, "concept": 1}) == "personne"
     # égalité 2-2 : l'ordre de KINDS tranche (lieu avant organisation)
     assert winner({"organisation": 2, "lieu": 2}) == "lieu"
-    # concept (repli, 4e) perd l'égalité face à une catégorie spécifique
+    # tie-break = position dans KINDS : concept (4e) précède quantite (6e) -> gagne
     assert winner({"concept": 2, "quantite": 2}) == "concept"
     assert winner({}) == DEFAULT_KIND
 ```
