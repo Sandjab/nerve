@@ -4,6 +4,7 @@ import unicodedata
 from collections import Counter
 
 from nerve.vecutil import dot
+from nerve.kinds import DEFAULT_KIND
 
 def normalized_key(name: str) -> str:
     """Clé déterministe : sans accents, casefold, [_\\W]+ -> espace, espaces normalisés."""
@@ -56,13 +57,12 @@ class EntityResolver:
         best = sorted(self._surface[eid].items(), key=lambda kv: (-kv[1], len(kv[0])))[0][0]
         self.store.set_entity_canonical(eid, best)
 
-    async def resolve(self, name: str, kind: str = "entity") -> int:
+    async def resolve(self, name: str, kind: str = DEFAULT_KIND) -> int:
         key = normalized_key(name)
         if key in self._by_key:
             eid = self._by_key[key]
             self.store.bump_entity_mention(eid)
-            if kind == "entity":
-                self.store.promote_entity_kind(eid)
+            self.store.vote_entity_kind(eid, kind)
             self._note(eid, name)
             return eid
         vec = await self.embed_fn(name)
@@ -75,8 +75,7 @@ class EntityResolver:
             self._surface[eid] = Counter()
         else:
             self.store.bump_entity_mention(eid)
-            if kind == "entity":
-                self.store.promote_entity_kind(eid)
+            self.store.vote_entity_kind(eid, kind)
         self._by_key[key] = eid
         self._note(eid, name)
         return eid

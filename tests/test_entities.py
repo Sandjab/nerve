@@ -54,7 +54,7 @@ async def test_resolver_preload_reuses_known_entity():
     class _Store:                                       # store minimal (pas de DB)
         def bump_entity_mention(self, eid): pass
         def set_entity_canonical(self, eid, name): pass
-        def promote_entity_kind(self, eid): pass
+        def vote_entity_kind(self, eid, categorie): pass
     async def emb(s): return [1.0, 0.0]
     r = EntityResolver(_Store(), 1, emb, 0.75)
     r.preload([(42, "Cluny", "cluny", 3, [1.0, 0.0])])
@@ -62,15 +62,17 @@ async def test_resolver_preload_reuses_known_entity():
     assert eid == 42
     assert r._surface[42] == Counter({"Cluny": 4})      # mention pré-chargée + 1
 
-async def test_resolver_assigns_and_promotes_kind(tmp_path):
-    st = Store(str(tmp_path / "k.db"), embed_dim=2); st.init_db()
-    doc = st.create_document(st.create_set("S"), "d", "text")
+async def test_resolver_vote_le_kind_a_chaque_occurrence(tmp_path):
+    async def embed_one(s):
+        return [1.0, 0.0, 0.0]                          # vecteur fixe (réidentif. par clé)
+    st = Store(str(tmp_path / "r.db"), embed_dim=3); st.init_db()
+    d = st.create_document(st.create_set("S"), "doc", "text")
+    r = EntityResolver(st, d, embed_one, threshold=0.9)
     def kind_of(eid):
         return st.conn.execute("SELECT kind FROM entities WHERE id=?", (eid,)).fetchone()[0]
-    r = EntityResolver(st, doc, _emb({"910": [1.0, 0.0], "Cluny": [0.0, 1.0]}), threshold=0.9)
-    v = await r.resolve("910", kind="value")
-    assert kind_of(v) == "value"
-    v2 = await r.resolve("910", kind="entity")     # même clé -> promotion value->entity
-    assert v2 == v and kind_of(v) == "entity"
-    e = await r.resolve("Cluny", kind="entity")
-    assert kind_of(e) == "entity"
+    a = await r.resolve("Cluny", kind="organisation")
+    assert kind_of(a) == "organisation"
+    b = await r.resolve("Cluny", kind="lieu")          # même clé : 1-1, tie-break -> lieu
+    assert b == a and kind_of(a) == "lieu"
+    await r.resolve("Cluny", kind="organisation")      # organisation 2, lieu 1
+    assert kind_of(a) == "organisation"

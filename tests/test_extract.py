@@ -35,9 +35,10 @@ def test_system_prompt_porte_les_regles_canoniques():
 
 def test_fact_schema_has_kind_fields():
     from nerve.extract import FACT_SCHEMA
+    from nerve.kinds import KINDS
     props = FACT_SCHEMA["properties"]
-    assert props["subject_kind"]["enum"] == ["entity", "value"]
-    assert props["object_kind"]["enum"] == ["entity", "value"]
+    assert props["subject_kind"]["enum"] == KINDS
+    assert props["object_kind"]["enum"] == KINDS
 
 def test_response_format_exige_tous_les_champs():
     # Pourquoi : à schéma lâche (seuls subject/predicate/object requis), les modèles

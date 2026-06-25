@@ -1,6 +1,7 @@
 # nerve/store.py
 import os
 import json
+from nerve.kinds import DEFAULT_KIND, winner
 import sqlite3
 import sqlite_vec
 import numpy as np
@@ -37,7 +38,8 @@ CREATE TABLE IF NOT EXISTS entities (
   document_id INTEGER REFERENCES documents(id),
   canonical_name TEXT NOT NULL, normalized_key TEXT NOT NULL,
   mention_count INTEGER DEFAULT 1,
-  kind TEXT DEFAULT 'entity',
+  kind TEXT DEFAULT 'concept',
+  kind_votes TEXT DEFAULT '{}',
   created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE INDEX IF NOT EXISTS idx_facts_doc ON facts(document_id);
@@ -123,8 +125,8 @@ class Store:
             "SELECT f.id, f.document_id, f.subject, f.predicate, f.object, "
             "f.title, f.description, f.evidence_span, f.confidence, f.tags_json, "
             "f.source_file, f.is_duplicate, f.dup_of_id, f.created_at, "
-            "se.canonical_name AS subject_canonical, "
-            "oe.canonical_name AS object_canonical FROM facts f "
+            "se.canonical_name AS subject_canonical, se.kind AS subject_kind, "
+            "oe.canonical_name AS object_canonical, oe.kind AS object_kind FROM facts f "
             "LEFT JOIN entities se ON se.id = f.subject_entity_id "
             "LEFT JOIN entities oe ON oe.id = f.object_entity_id "
             "WHERE f.document_id = ?" + where + " ORDER BY f.id",
@@ -168,18 +170,26 @@ class Store:
         return [r["id"] for r in rows]
 
     def create_entity(self, document_id: int, canonical_name: str,
-                      normalized_key: str, kind: str = "entity") -> int:
+                      normalized_key: str, kind: str = DEFAULT_KIND) -> int:
         cur = self.conn.execute(
-            "INSERT INTO entities(document_id, canonical_name, normalized_key, kind) "
-            "VALUES (?, ?, ?, ?)", (document_id, canonical_name, normalized_key, kind))
+            "INSERT INTO entities(document_id, canonical_name, normalized_key, kind, kind_votes) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (document_id, canonical_name, normalized_key, kind, json.dumps({kind: 1})))
         self.conn.commit()
         return cur.lastrowid
 
-    def promote_entity_kind(self, entity_id: int) -> None:
-        """Promotion vers 'entity' (entity domine value) ; no-op si déjà 'entity'."""
+    def vote_entity_kind(self, entity_id: int, categorie: str) -> None:
+        """Ajoute une voix pour `categorie` et recalcule kind = catégorie majoritaire
+        (tie-break par ordre de la taxonomie). Fail-loud si l'état est illisible."""
+        row = self.conn.execute(
+            "SELECT kind_votes FROM entities WHERE id = ?", (entity_id,)).fetchone()
+        if row is None:                                # fail-loud : entité inexistante = invariant violé
+            raise ValueError(f"vote_entity_kind : entité {entity_id} introuvable")
+        votes = json.loads(row["kind_votes"])          # lève si illisible (fail-loud)
+        votes[categorie] = votes.get(categorie, 0) + 1
         self.conn.execute(
-            "UPDATE entities SET kind = 'entity' WHERE id = ? AND kind = 'value'",
-            (entity_id,))
+            "UPDATE entities SET kind = ?, kind_votes = ? WHERE id = ?",
+            (winner(votes), json.dumps(votes), entity_id))
         self.conn.commit()
 
     def find_entity_by_key(self, document_id: int, normalized_key: str) -> int | None:
@@ -240,6 +250,8 @@ class Store:
     _GRAPH_COLS = (
         "f.id AS fact_id, f.predicate AS predicate, f.confidence AS confidence, "
         "f.document_id AS document_id, d.set_id AS set_id, "
+        "se.id AS s_entity_id, oe.id AS o_entity_id, "
+        "se.kind_votes AS s_votes, oe.kind_votes AS o_votes, "
         "se.normalized_key AS s_key, se.canonical_name AS s_name, "
         "se.mention_count AS s_mentions, se.kind AS s_kind, "
         "oe.normalized_key AS o_key, oe.canonical_name AS o_name, "

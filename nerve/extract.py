@@ -1,6 +1,8 @@
 # nerve/extract.py
 import json
 
+from nerve.kinds import KINDS
+
 FACT_SCHEMA = {
     "type": "object",
     "properties": {
@@ -9,8 +11,8 @@ FACT_SCHEMA = {
         "subject": {"type": "string"},
         "predicate": {"type": "string"},
         "object": {"type": "string"},
-        "subject_kind": {"type": "string", "enum": ["entity", "value"]},
-        "object_kind": {"type": "string", "enum": ["entity", "value"]},
+        "subject_kind": {"type": "string", "enum": KINDS},
+        "object_kind": {"type": "string", "enum": KINDS},
         "evidence_span": {"type": "string"},
         "confidence": {"type": "integer", "minimum": 0, "maximum": 100},
         "tags": {"type": "array", "items": {"type": "string"}},
@@ -54,14 +56,16 @@ SYSTEM_PROMPT = (
     "descriptive, mets la valeur atomique dans object et explique dans description.\n"
     "- Privilégie les arêtes entité-entité (deux entités nommées) ; entité-valeur "
     "est correct aussi.\n\n"
-    "Pour subject ET object, indique aussi son type via subject_kind / object_kind : "
-    "« entity » = entité nommée (personne, lieu, organisation, œuvre, concept réifié) ; "
-    "« value » = valeur littérale (date, nombre, mesure, durée, quantité, proportion). "
-    "Ex. (Cluny, fonde, 910) -> subject_kind=entity, object_kind=value.\n\n"
+    "Pour subject ET object, indique sa catégorie via subject_kind / object_kind, "
+    "parmi : personne (individu nommé), lieu (lieu géographique), organisation "
+    "(institution, groupe, entreprise), concept (idée, méthode, œuvre, événement, "
+    "abstrait), date (année, siècle, date), quantite (nombre, mesure, durée, "
+    "proportion). En cas de doute, utilise « concept ». "
+    "Ex. (Cluny, fonde, 910) -> subject_kind=organisation, object_kind=date.\n\n"
     "Pour chaque fait, fournis TOUS ces champs : title (une phrase <=140 car.), "
     "description (2-3 phrases <=350 car. portant la réponse + preuve, citation "
-    "verbatim si utile), subject, subject_kind (entity|value), predicate (relation "
-    "snake_case précise, <=32 car.), object, object_kind (entity|value), evidence_span "
+    "verbatim si utile), subject, subject_kind (catégorie), predicate (relation "
+    "snake_case précise, <=32 car.), object, object_kind (catégorie), evidence_span "
     "(citation verbatim, sous-chaîne du document), confidence (0-100), tags "
     "(minuscules, alphanumérique+tiret). N'omets JAMAIS subject_kind ni object_kind."
 )

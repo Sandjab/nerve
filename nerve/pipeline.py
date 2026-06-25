@@ -9,10 +9,11 @@ from nerve.llm import stream_chat
 from nerve.embeddings import embed
 from nerve.entities import EntityResolver
 from nerve.dedup import FactDeduper
+from nerve.kinds import normalize_kind
 
 def _kind(raw) -> str:
-    """Normalise le type d'un nœud : 'value' seulement si explicitement value, sinon entity."""
-    return "value" if str(raw or "").strip().lower() == "value" else "entity"
+    """Catégorie normalisée d'un nœud (repli 'concept' si hors taxonomie)."""
+    return normalize_kind(raw)
 
 async def run_extraction(cfg: Config, store: Store, doc_id: int,
                         segments: list[tuple[str, str]], *,

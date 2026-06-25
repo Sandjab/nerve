@@ -32,22 +32,33 @@ def test_build_graph_skips_rows_without_key():
     assert len(g["links"]) == 1
 
 
-def _krow(s_key, o_key, fid, set_id, s_kind="entity", o_kind="entity", conf=80):
-    return {"s_key": s_key, "s_name": s_key.title(), "predicate": "p",
-            "o_key": o_key, "o_name": o_key.title(), "fact_id": fid,
-            "s_mentions": 1, "o_mentions": 1, "confidence": conf,
-            "document_id": 1, "set_id": set_id, "s_kind": s_kind, "o_kind": o_kind}
+def _krow(s_key, o_key, fid, set_id, s_kind="concept", o_kind="concept",
+         conf=80, s_eid=None, o_eid=None, s_votes=None, o_votes=None):
+    import json
+    return {"fact_id": fid, "predicate": "rel", "confidence": conf,
+            "s_key": s_key, "s_name": s_key, "s_mentions": 1,
+            "o_key": o_key, "o_name": o_key, "o_mentions": 1,
+            "document_id": 1, "set_id": set_id, "s_kind": s_kind, "o_kind": o_kind,
+            "s_entity_id": s_eid if s_eid is not None else hash(("s", s_key, set_id)),
+            "o_entity_id": o_eid if o_eid is not None else hash(("o", o_key, set_id)),
+            "s_votes": json.dumps(s_votes or {s_kind: 1}),
+            "o_votes": json.dumps(o_votes or {o_kind: 1})}
 
-def test_build_graph_kind_entity_dominates_value():
-    rows = [_krow("x", "y", 1, 1, s_kind="value"),     # x vu d'abord en value
-            _krow("x", "z", 2, 1, s_kind="entity")]    # puis en entity -> domine
+def test_build_graph_kind_vote_majoritaire_au_collapse():
+    # x apparaît dans deux entités-docs (eid distincts) : organisation (3 votes) vs lieu (1)
+    rows = [_krow("x", "y", 1, 1, s_eid=10, s_votes={"organisation": 3}),
+            _krow("x", "z", 2, 2, s_eid=20, s_votes={"lieu": 1})]
     nodes = {n["id"]: n for n in build_graph(rows)["nodes"]}
-    assert nodes["x"]["kind"] == "entity"
-    assert nodes["y"]["kind"] == "entity"
+    assert nodes["x"]["kind"] == "organisation"
 
-def test_build_graph_node_only_value_stays_value():
-    nodes = {n["id"]: n for n in build_graph([_krow("a", "9", 1, 1, o_kind="value")])["nodes"]}
-    assert nodes["9"]["kind"] == "value"
+def test_build_graph_collapse_dedup_par_entity_id():
+    # même entité-doc (eid 10) vue dans 2 faits : ses votes ne comptent qu'une fois
+    rows = [_krow("x", "y", 1, 1, s_eid=10, s_votes={"lieu": 1}),
+            _krow("x", "z", 2, 1, s_eid=10, s_votes={"lieu": 1}),
+            _krow("x", "w", 3, 1, s_eid=99, s_votes={"organisation": 1})]
+    nodes = {n["id"]: n for n in build_graph(rows)["nodes"]}
+    assert nodes["x"]["kind"] == "lieu"            # 1 vote lieu vs 1 vote organisation -> tie-break ordre -> lieu
+    assert "s_entity_id" not in nodes["x"] and "s_votes" not in nodes["x"]
 
 def test_build_graph_sets_and_bridge():
     rows = [_krow("cluny", "abbaye", 1, 1),    # cluny dans set 1

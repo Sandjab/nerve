@@ -1,4 +1,5 @@
 # tests/test_store.py
+import pytest
 from nerve.store import Store
 
 def test_create_and_read_facts(tmp_path):
@@ -92,6 +93,21 @@ def test_get_facts_n_expose_pas_les_entity_ids_internes(tmp_path):
     # champs utiles au client conservés
     assert fact["subject"] == "A" and fact["object"] == "B"
     assert fact["subject_canonical"] == "A" and fact["object_canonical"] == "B"
+
+def test_get_facts_expose_le_kind_des_entites(tmp_path):
+    # le graphe document (front addFact) colore par catégorie -> get_facts doit
+    # exposer le kind résolu des entités, sinon les nœuds n'ont pas de kind et le
+    # mode « Type » est uniforme (cf. smoke #11).
+    st = Store(str(tmp_path / "gk.db"), embed_dim=4)
+    st.init_db()
+    set_id = st.create_set("S"); doc_id = st.create_document(set_id, "d", "text")
+    se = st.create_entity(doc_id, "Cluny", "cluny", kind="organisation")
+    oe = st.create_entity(doc_id, "910", "910", kind="date")
+    st.add_fact(doc_id, {"subject": "Cluny", "predicate": "fonde_en", "object": "910"},
+                subject_entity_id=se, object_entity_id=oe)
+    fact = st.get_facts(doc_id)[0]
+    assert fact["subject_kind"] == "organisation"
+    assert fact["object_kind"] == "date"
 
 def test_get_facts_can_include_duplicates(tmp_path):
     st = Store(str(tmp_path / "d.db"), embed_dim=4)
@@ -240,25 +256,43 @@ def test_facts_for_entities(tmp_path):
 def test_graph_cols_expose_kind_and_set(tmp_path):
     st = Store(str(tmp_path / "gc.db"), embed_dim=3); st.init_db()
     s = st.create_set("S"); d = st.create_document(s, "doc", "text")
-    se = st.create_entity(d, "Cluny", "cluny", kind="entity")
-    oe = st.create_entity(d, "910", "910", kind="value")
+    se = st.create_entity(d, "Cluny", "cluny", kind="organisation")
+    oe = st.create_entity(d, "910", "910", kind="date")
     f = st.add_fact(d, {"subject": "Cluny", "predicate": "fonde", "object": "910"},
                     subject_entity_id=se, object_entity_id=oe)
     r0 = st.facts_for_set(s)[0]
-    assert r0["s_kind"] == "entity" and r0["o_kind"] == "value" and r0["set_id"] == s
+    assert r0["s_kind"] == "organisation" and r0["o_kind"] == "date" and r0["set_id"] == s
     # facts_for_entities expose aussi set_id (JOIN documents ajouté)
     r1 = st.facts_for_entities([se])[0]
-    assert r1["set_id"] == s and r1["s_kind"] == "entity" and r1["fact_id"] == f
+    assert r1["set_id"] == s and r1["s_kind"] == "organisation" and r1["fact_id"] == f
 
-def test_entity_kind_default_and_promote(tmp_path):
+def test_graph_cols_expose_kind_votes_et_entity_id(tmp_path):
+    st = Store(str(tmp_path / "gc.db"), embed_dim=3); st.init_db()
+    s = st.create_set("S"); d = st.create_document(s, "doc", "text")
+    se = st.create_entity(d, "Cluny", "cluny", kind="organisation")
+    oe = st.create_entity(d, "910", "910", kind="date")
+    st.add_fact(d, {"subject": "Cluny", "predicate": "fonde_en", "object": "910",
+                    "confidence": 80}, subject_entity_id=se, object_entity_id=oe)
+    r0 = st.facts_for_set(s)[0]
+    assert r0["s_kind"] == "organisation" and r0["o_kind"] == "date"
+    assert r0["s_entity_id"] == se and r0["o_entity_id"] == oe
+    assert r0["s_votes"] == '{"organisation": 1}' and r0["o_votes"] == '{"date": 1}'
+
+def test_entity_kind_vote_majoritaire(tmp_path):
     st = Store(str(tmp_path / "kind.db"), embed_dim=3); st.init_db()
-    d = st.create_document(st.create_set("S"), "doc", "text")
+    d = st.create_document(st.create_set("S"), "d", "text")
     def kind_of(eid):
         return st.conn.execute("SELECT kind FROM entities WHERE id=?", (eid,)).fetchone()[0]
-    e_def = st.create_entity(d, "Cluny", "cluny")               # défaut -> entity
-    e_val = st.create_entity(d, "910", "910", kind="value")     # explicite value
-    assert kind_of(e_def) == "entity" and kind_of(e_val) == "value"
-    st.promote_entity_kind(e_val)                               # value -> entity (idempotent)
-    assert kind_of(e_val) == "entity"
-    st.promote_entity_kind(e_def)                               # déjà entity -> no-op
-    assert kind_of(e_def) == "entity"
+    e = st.create_entity(d, "Cluny", "cluny", kind="organisation")
+    assert kind_of(e) == "organisation"                 # 1er vote
+    st.vote_entity_kind(e, "lieu")                       # 1-1 : tie-break ordre -> lieu
+    assert kind_of(e) == "lieu"
+    st.vote_entity_kind(e, "organisation")              # organisation 2, lieu 1
+    assert kind_of(e) == "organisation"
+
+def test_vote_entity_kind_leve_si_entite_inconnue(tmp_path):
+    # fail-loud : voter pour un entity_id inexistant = invariant violé (bug) ;
+    # l'erreur doit remonter clairement, pas être avalée (revue Gemini #24).
+    st = Store(str(tmp_path / "v.db"), embed_dim=3); st.init_db()
+    with pytest.raises(ValueError):
+        st.vote_entity_kind(999, "personne")

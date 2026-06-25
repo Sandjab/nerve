@@ -89,12 +89,12 @@ async def test_resume_skips_segment_and_preloads_dedup(tmp_path, monkeypatch):
     assert doc["duplicate_facts"] == 1    # exactement 1 (seg0 sauté, sinon ce serait 2)
 
 async def fake_stream_kinds(cfg, messages, **kw):
-    yield ('[{"subject":"Cluny","predicate":"fonde","object":"910",'
-           '"subject_kind":"entity","object_kind":"value"}]')
+    yield ('[{"subject":"Cluny","predicate":"fonde_en","object":"910",'
+           '"subject_kind":"organisation","object_kind":"date"}]')
 
 async def fake_embed_kinds(cfg, texts, **kw):
     table = {"Cluny": [1.0, 0.0, 0.0], "910": [0.0, 1.0, 0.0],
-             "Cluny fonde 910": [0.0, 0.0, 1.0]}
+             "Cluny fonde_en 910": [0.0, 0.0, 1.0]}
     return [table[t] for t in texts]
 
 async def test_extraction_utilise_temperature_basse(tmp_path, monkeypatch):
@@ -121,4 +121,4 @@ async def test_run_extraction_persists_kind(tmp_path, monkeypatch):
     [e async for e in pipe.run_extraction(load_config(), st, doc_id, [("t", "")])]
     rows = st.conn.execute("SELECT canonical_name, kind FROM entities").fetchall()
     kinds = {r["canonical_name"]: r["kind"] for r in rows}
-    assert kinds["Cluny"] == "entity" and kinds["910"] == "value"
+    assert kinds["Cluny"] == "organisation" and kinds["910"] == "date"
