@@ -178,13 +178,6 @@ class Store:
         self.conn.commit()
         return cur.lastrowid
 
-    def promote_entity_kind(self, entity_id: int) -> None:
-        """Promotion vers 'entity' (entity domine value) ; no-op si déjà 'entity'."""
-        self.conn.execute(
-            "UPDATE entities SET kind = 'entity' WHERE id = ? AND kind = 'value'",
-            (entity_id,))
-        self.conn.commit()
-
     def vote_entity_kind(self, entity_id: int, categorie: str) -> None:
         """Ajoute une voix pour `categorie` et recalcule kind = catégorie majoritaire
         (tie-break par ordre de la taxonomie). Fail-loud si l'état est illisible."""
