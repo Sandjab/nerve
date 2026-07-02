@@ -16,3 +16,7 @@ __pycache__/
 
 # OS
 .DS_Store
+
+# Artefacts d'outils & brouillons locaux
+.playwright-mcp/
+playground-refonte-nerve.html
